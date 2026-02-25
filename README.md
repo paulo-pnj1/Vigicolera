@@ -1,12 +1,31 @@
-# React + Vite
+# Cholera Monitor - Uíge Real-Time Outbreak Tracker
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Sistema de monitorização geográfica em tempo real de casos suspeitos e confirmados de cólera na província do Uíge, Angola.
 
-Currently, two official plugins are available:
+Permite que agentes de saúde enviem localizações via telemóvel e visualize os casos num mapa interativo atualizado em tempo real.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Demo (se disponível)
 
-## Expanding the ESLint configuration
+- Painel web: [https://cholera-monitor-uige.web.app](https://cholera-monitor-uige.web.app) *(substitua pelo link real quando deployado)*
+- Vídeo demonstrativo: [YouTube / Loom link] *(opcional)*
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Funcionalidades
+
+- Envio de casos suspeitos/confirmados diretamente do telemóvel Android (sem app nativa)
+- Registo automático de coordenadas GPS + metadados (agente, gravidade, data/hora)
+- Armazenamento em tempo real na nuvem
+- Mapa interativo com marcadores coloridos por gravidade
+- Filtros por data, gravidade e agente
+- Interface web responsiva
+
+## Stack Tecnológica
+
+| Camada         | Tecnologia                          | Finalidade                              |
+|----------------|-------------------------------------|-----------------------------------------|
+| Frontend       | React 18 + Vite                     | Interface e mapa interativo             |
+| Mapas          | Google Maps JavaScript API          | Visualização geográfica                 |
+| Backend/DB     | Firebase Realtime Database          | Armazenamento e sincronização em tempo real |
+| Mobile coleta  | HTTP Shortcuts (Android)            | Envio simples de dados via POST         |
+| Autenticação   | Firebase Authentication (planeado)  | Controle de acesso futuro               |
+
+
