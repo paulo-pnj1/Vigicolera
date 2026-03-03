@@ -439,18 +439,13 @@ export default function MapaCasos() {
 
   // Dados
   const [casos,setCasos]       = useState([]);
-  const [loading,setLoading]   = useState(false);
+  const [loading,setLoading]   = useState(true);
   const [lastUpdate,setLast]   = useState(null);
+  const [mapReady, setMapReady] = useState(false);
 
-  // Filtros unificados — ÚNICO estado
-  const [F,setFiltros] = useState({ busca:'', status:'todos', gravidade:'todos', bairro:'todos', dateFrom:null, dateTo:null });
-  const setF = (k,v) => setFiltros(p=>({...p,[k]:v}));
-  const clearF = () => setFiltros({ busca:'', status:'todos', gravidade:'todos', bairro:'todos', dateFrom:null, dateTo:null });
-  const nActiveF = Object.entries(F).filter(([k,v])=>v&&v!=='todos'&&!(k==='busca'&&v==='')).length;
-
-  // Mapa
+  // Mapa - estado inicial
   const [center,setCenter]   = useState({lat:-8.8368,lng:13.2343});
-  const [zoom,setZoom]       = useState(12);
+  const [zoom,setZoom]       = useState(6);
   const [mapType,setMapType] = useState('roadmap');
   const [viewMode,setVM]     = useState('casos');
   const [heatmap,setHeatmap] = useState(false);
@@ -468,6 +463,12 @@ export default function MapaCasos() {
   const [notifs,setNotifs]     = useState([]);
   const [showNotif,setShowN]   = useState(false);
 
+  // Filtros unificados
+  const [F,setFiltros] = useState({ busca:'', status:'todos', gravidade:'todos', bairro:'todos', dateFrom:null, dateTo:null });
+  const setF = (k,v) => setFiltros(p=>({...p,[k]:v}));
+  const clearF = () => setFiltros({ busca:'', status:'todos', gravidade:'todos', bairro:'todos', dateFrom:null, dateTo:null });
+  const nActiveF = Object.entries(F).filter(([k,v])=>v&&v!=='todos'&&!(k==='busca'&&v==='')).length;
+
   useEffect(()=>{ setSidebar(isDesk); },[isDesk]);
 
   const addN = useCallback((msg,sev='info')=>{
@@ -475,78 +476,219 @@ export default function MapaCasos() {
     setShowN(true);
   },[]);
 
-  // Firebase
-  useEffect(()=>{
-    let alive=true;
+  // 1. Primeiro declaramos grupos (depende apenas de casos)
+  const grupos = useMemo(() => groupByBairro(casos), [casos]);
+  
+  // 2. Depois declaramos bairroOpts (depende de grupos)
+  const bairroOpts = useMemo(() => ['todos', ...Object.keys(grupos).sort()], [grupos]);
+  
+  // 3. Depois declaramos casosF (depende de casos e F)
+  const casosF = useMemo(() => casos.filter(c => {
+    const q = F.busca.toLowerCase();
+    if (q && !c.agente.toLowerCase().includes(q) && !c.id.toLowerCase().includes(q) && !c.bairro?.toLowerCase().includes(q) && !c.notas?.toLowerCase().includes(q)) return false;
+    if (F.status !== 'todos' && c.status !== F.status) return false;
+    if (F.gravidade !== 'todos' && c.gravidade !== F.gravidade) return false;
+    if (F.bairro !== 'todos' && c.bairro !== F.bairro) return false;
+    if (F.dateFrom && isBefore(new Date(c.timestamp), F.dateFrom)) return false;
+    if (F.dateTo && isAfter(new Date(c.timestamp), F.dateTo)) return false;
+    return true;
+  }), [casos, F]);
+  
+  // 4. Depois declaramos gruposF (depende de casosF)
+  const gruposF = useMemo(() => groupByBairro(casosF), [casosF]);
+  
+  // 5. Depois declaramos stats (depende de casos, casosF e grupos)
+  const stats = useMemo(() => ({
+    total: casos.length, 
+    filtrados: casosF.length,
+    confirmados: casos.filter(c => c.status === 'confirmado').length,
+    suspeitos: casos.filter(c => c.status === 'suspeito').length,
+    pendentes: casos.filter(c => c.status === 'pendente-analise').length,
+    descartados: casos.filter(c => c.status === 'descartado').length,
+    criticos: casos.filter(c => c.gravidade === 'critico').length,
+    severos: casos.filter(c => c.gravidade === 'severa').length,
+    moderados: casos.filter(c => c.gravidade === 'moderada').length,
+    leves: casos.filter(c => c.gravidade === 'leve').length,
+    bairros: Object.keys(grupos).length,
+  }), [casos, casosF, grupos]);
+  
+  // 6. Depois declaramos ia (depende de stats, grupos e casos)
+  const ia = useMemo(() => casos.length > 0 ? gerarIA(stats, grupos, casos) : 'Sem dados. Aguardando registros…', [stats, grupos, casos]);
+
+  // 7. Função calculateBounds (não depende de estados que mudam frequentemente)
+  const calculateBounds = useCallback((casosList) => {
+    if (!casosList || casosList.length === 0) {
+      return { center: { lat: -8.8368, lng: 13.2343 }, zoom: 6 };
+    }
+
+    const casosValidos = casosList.filter(c => 
+      c.coordenadas && 
+      typeof c.coordenadas.lat === 'number' && 
+      typeof c.coordenadas.lng === 'number' &&
+      !isNaN(c.coordenadas.lat) && 
+      !isNaN(c.coordenadas.lng)
+    );
+
+    if (casosValidos.length === 0) {
+      return { center: { lat: -8.8368, lng: 13.2343 }, zoom: 6 };
+    }
+
+    let minLat = Math.min(...casosValidos.map(c => c.coordenadas.lat));
+    let maxLat = Math.max(...casosValidos.map(c => c.coordenadas.lat));
+    let minLng = Math.min(...casosValidos.map(c => c.coordenadas.lng));
+    let maxLng = Math.max(...casosValidos.map(c => c.coordenadas.lng));
+
+    const latMargin = (maxLat - minLat) * 0.1;
+    const lngMargin = (maxLng - minLng) * 0.1;
+    
+    minLat = Math.max(-90, minLat - latMargin);
+    maxLat = Math.min(90, maxLat + latMargin);
+    minLng = Math.max(-180, minLng - lngMargin);
+    maxLng = Math.min(180, maxLng + lngMargin);
+
+    const center = {
+      lat: (minLat + maxLat) / 2,
+      lng: (minLng + maxLng) / 2
+    };
+
+    const latDiff = maxLat - minLat;
+    const lngDiff = maxLng - minLng;
+    const maxDiff = Math.max(latDiff, lngDiff);
+    
+    let zoom;
+    if (maxDiff < 0.01) zoom = 15;
+    else if (maxDiff < 0.05) zoom = 13;
+    else if (maxDiff < 0.1) zoom = 11;
+    else if (maxDiff < 0.5) zoom = 9;
+    else if (maxDiff < 1) zoom = 7;
+    else zoom = 6;
+
+    return { center, zoom };
+  }, []);
+
+  // 8. Firebase effect (agora pode usar calculateBounds)
+  useEffect(() => {
+    let alive = true;
     setLoading(true);
-    const r=ref(database,'casos-colera');
-    const unsub=onValue(r,async snap=>{
-      if(!alive) return;
-      const data=snap.val();
-      if(!data){ setCasos([]); setLoading(false); return; }
-      const arr=Object.entries(data).map(([id,c])=>({
-        id, agente:c.agente||'Desconhecido',
-        coordenadas:{lat:parseFloat(c.coordenadas?.lat)||0,lng:parseFloat(c.coordenadas?.lng)||0,precisao:c.coordenadas?.precisao||100},
-        dataHora:c.dataHora||'—', dispositivo:c.dispositivo||'—', gravidade:c.gravidade||'leve',
-        status:c.tipoCaso||'pendente-analise', timestamp:c.timestamp||Date.now(), bairro:c.bairro||'Desconhecido', notas:c.notas||'',
+    const r = ref(database, 'casos-colera');
+    const unsub = onValue(r, async snap => {
+      if (!alive) return;
+      const data = snap.val();
+      if (!data) { 
+        setCasos([]); 
+        setLoading(false); 
+        setMapReady(true);
+        return; 
+      }
+      
+      const arr = Object.entries(data).map(([id, c]) => ({
+        id, 
+        agente: c.agente || 'Desconhecido',
+        coordenadas: {
+          lat: parseFloat(c.coordenadas?.lat) || 0,
+          lng: parseFloat(c.coordenadas?.lng) || 0,
+          precisao: c.coordenadas?.precisao || 100
+        },
+        dataHora: c.dataHora || '—', 
+        dispositivo: c.dispositivo || '—', 
+        gravidade: c.gravidade || 'leve',
+        status: c.tipoCaso || 'pendente-analise', 
+        timestamp: c.timestamp || Date.now(), 
+        bairro: c.bairro || 'Desconhecido', 
+        notas: c.notas || '',
       }));
-      const enriched = await Promise.all(arr.map(async c=>{
-        if(c.bairro==='Desconhecido'&&c.coordenadas.lat&&c.coordenadas.lng){
-          const b=await getBairro(c.coordenadas.lat,c.coordenadas.lng,MAPS_KEY);
-          if(b!=='Desconhecido'){ try{await update(ref(database,`casos-colera/${c.id}`),{bairro:b});}catch{} }
-          return {...c,bairro:b};
+      
+      const enriched = await Promise.all(arr.map(async c => {
+        if (c.bairro === 'Desconhecido' && c.coordenadas.lat && c.coordenadas.lng) {
+          const b = await getBairro(c.coordenadas.lat, c.coordenadas.lng, MAPS_KEY);
+          if (b !== 'Desconhecido') { 
+            try { await update(ref(database, `casos-colera/${c.id}`), { bairro: b }); } catch {} 
+          }
+          return { ...c, bairro: b };
         }
         return c;
       }));
-      if(alive){ setCasos(enriched); setLast(new Date()); setLoading(false); addN(`${enriched.length} casos carregados`,'success'); }
-    },err=>{ if(alive){addN('Erro: '+err.message,'error');setLoading(false);} });
-    return()=>{ alive=false; unsub(); off(r); };
-  },[addN]);
+      
+      if (alive) { 
+        setCasos(enriched); 
+        setLast(new Date()); 
+        
+        const { center: newCenter, zoom: newZoom } = calculateBounds(enriched);
+        setCenter(newCenter);
+        setZoom(newZoom);
+        
+        setLoading(false); 
+        setMapReady(true);
+        addN(`${enriched.length} casos carregados e mapa ajustado`, 'success'); 
+      }
+    }, err => { 
+      if (alive) {
+        addN('Erro: ' + err.message, 'error');
+        setLoading(false);
+        setMapReady(true);
+      }
+    });
+    return () => { alive = false; unsub(); off(r); };
+  }, [addN, calculateBounds]); // Remove calculateBounds das dependências se for estável
 
-  const grupos    = useMemo(()=>groupByBairro(casos),[casos]);
-  const bairroOpts = useMemo(()=>['todos',...Object.keys(grupos).sort()],[grupos]);
+  // 9. Efeito opcional para ajustar mapa quando filtros mudarem (AGORA PODE USAR casosF)
+  useEffect(() => {
+    if (casosF.length > 0 && mapReady) {
+      // Descomente se quiser ajustar automático
+      const { center: newCenter, zoom: newZoom } = calculateBounds(casosF);
+      setCenter(newCenter);
+      setZoom(newZoom);
+    }
+  }, [casosF, mapReady]); // Remove calculateBounds se não for usar
 
-  const casosF = useMemo(()=>casos.filter(c=>{
-    const q=F.busca.toLowerCase();
-    if(q&&!c.agente.toLowerCase().includes(q)&&!c.id.toLowerCase().includes(q)&&!c.bairro?.toLowerCase().includes(q)&&!c.notas?.toLowerCase().includes(q)) return false;
-    if(F.status!=='todos'&&c.status!==F.status) return false;
-    if(F.gravidade!=='todos'&&c.gravidade!==F.gravidade) return false;
-    if(F.bairro!=='todos'&&c.bairro!==F.bairro) return false;
-    if(F.dateFrom&&isBefore(new Date(c.timestamp),F.dateFrom)) return false;
-    if(F.dateTo&&isAfter(new Date(c.timestamp),F.dateTo)) return false;
-    return true;
-  }),[casos,F]);
-
-  const gruposF = useMemo(()=>groupByBairro(casosF),[casosF]);
-
-  const stats = useMemo(()=>({
-    total:casos.length, filtrados:casosF.length,
-    confirmados:casos.filter(c=>c.status==='confirmado').length,
-    suspeitos:casos.filter(c=>c.status==='suspeito').length,
-    pendentes:casos.filter(c=>c.status==='pendente-analise').length,
-    descartados:casos.filter(c=>c.status==='descartado').length,
-    criticos:casos.filter(c=>c.gravidade==='critico').length,
-    severos:casos.filter(c=>c.gravidade==='severa').length,
-    moderados:casos.filter(c=>c.gravidade==='moderada').length,
-    leves:casos.filter(c=>c.gravidade==='leve').length,
-    bairros:Object.keys(grupos).length,
-  }),[casos,casosF,grupos]);
-
-  const ia = useMemo(()=>casos.length>0?gerarIA(stats,grupos,casos):'Sem dados. Aguardando registros…',[stats,grupos,casos]);
-
-  const goToCase = useCallback(caso=>{
-    setSel(caso); setCenter(caso.coordenadas); setInfoId(caso.id); setDetail(true);
-    if(!isDesk) setSidebar(false);
-  },[isDesk]);
-
-  const goToGroup = useCallback((b,g)=>{
-    setCenter(g.coordenadas); setInfoId(`g-${b}`);
-    setSel({id:`g-${b}`,bairro:b,agente:`${g.casos.length} casos`,status:'agrupado',gravidade:'—',
-      coordenadas:g.coordenadas,dataHora:'—',dispositivo:'—',
-      notas:`Conf: ${g.confirmados} | Susp: ${g.suspeitos} | Pend: ${g.pendentes}`,_g:g});
+  // 10. Handlers (dependem de casos, casosF, etc)
+  const goToCase = useCallback(caso => {
+    setSel(caso); 
+    setCenter(caso.coordenadas); 
+    setZoom(17);
+    setInfoId(caso.id); 
     setDetail(true);
-    if(!isDesk) setSidebar(false);
-  },[isDesk]);
+    if (!isDesk) setSidebar(false);
+  }, [isDesk]);
+
+  const goToGroup = useCallback((b, g) => {
+    setCenter(g.coordenadas); 
+    setZoom(15);
+    setInfoId(`g-${b}`);
+    setSel({
+      id: `g-${b}`,
+      bairro: b,
+      agente: `${g.casos.length} casos`,
+      status: 'agrupado',
+      gravidade: '—',
+      coordenadas: g.coordenadas,
+      dataHora: '—',
+      dispositivo: '—',
+      notas: `Conf: ${g.confirmados} | Susp: ${g.suspeitos} | Pend: ${g.pendentes}`,
+      _g: g
+    });
+    setDetail(true);
+    if (!isDesk) setSidebar(false);
+  }, [isDesk]);
+
+  const fitMapToAllCases = useCallback(() => {
+    if (casos.length > 0) {
+      const { center: newCenter, zoom: newZoom } = calculateBounds(casos);
+      setCenter(newCenter);
+      setZoom(newZoom);
+      addN('Mapa ajustado para todos os casos', 'info');
+    }
+  }, [casos, calculateBounds, addN]);
+
+  const fitMapToFilteredCases = useCallback(() => {
+    if (casosF.length > 0) {
+      const { center: newCenter, zoom: newZoom } = calculateBounds(casosF);
+      setCenter(newCenter);
+      setZoom(newZoom);
+      addN(`Mapa ajustado para ${casosF.length} casos filtrados`, 'info');
+    }
+  }, [casosF, calculateBounds, addN]);
+
 
   const reload = ()=>{ setLoading(true); setTimeout(()=>{ setLoading(false); addN('Dados actualizados','success'); },1500); };
 
