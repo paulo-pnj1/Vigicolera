@@ -1,34 +1,41 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+/**
+ * VigiCólera Uige — MapaCasos
+ * Google Maps Light style + Filtros unificados + Todas as funcionalidades
+ */
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Box, Card, Chip, Avatar, List, ListItem, ListItemButton, ListItemText, Paper, Grid,
-  IconButton, Drawer, AppBar, Toolbar, Badge, Fab, Tooltip, Collapse, Alert, LinearProgress,
-  CircularProgress, Divider, Button, Dialog, DialogTitle, DialogContent,
-  DialogActions, Snackbar, ToggleButton, ToggleButtonGroup, TextField, FormControl,
-  InputLabel, Select, MenuItem, ListItemAvatar, CardContent, Typography,
-  Accordion, AccordionSummary, AccordionDetails
+  Box, Card, CardContent, Chip, Avatar, List, ListItem, ListItemButton,
+  ListItemAvatar, Paper, Grid, IconButton, Drawer, AppBar, Toolbar,
+  Badge, Tooltip, Collapse, Alert, LinearProgress, CircularProgress,
+  Divider, Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  Snackbar, ToggleButton, ToggleButtonGroup, TextField, FormControl,
+  InputLabel, Select, MenuItem, Typography, Accordion, AccordionSummary,
+  AccordionDetails, useMediaQuery, SwipeableDrawer, Menu, InputAdornment, Fab, Zoom,
 } from '@mui/material';
 import {
-  Search as SearchIcon, FilterList as FilterIcon, Analytics as AnalyticsIcon, Close as CloseIcon,
-  LocationOn as LocationIcon, Warning as WarningIcon, CheckCircle as CheckCircleIcon,
-  Schedule as ScheduleIcon, Cancel as CancelIcon, Phone as PhoneIcon, Timeline as TimelineIcon,
-  Visibility as VisibilityIcon, Map as MapIcon, People as PeopleIcon, TrendingUp as TrendingUpIcon,
-  LocationCity as LocationCityIcon, Refresh as RefreshIcon, Layers as LayersIcon,
-  Notifications as NotificationsIcon, DateRange as DateRangeIcon, ZoomIn as ZoomInIcon,
-  ZoomOut as ZoomOutIcon, MyLocation as MyLocationIcon, GetApp as GetAppIcon,
-  SmartToy as SmartToyIcon, ExpandMore as ExpandMoreIcon, VisibilityOff as VisibilityOffIcon
+  Search as SearchIcon, FilterList as FilterIcon, Analytics as AnalyticsIcon,
+  Close as CloseIcon, LocationOn as LocationIcon, Warning as WarningIcon,
+  CheckCircle as CheckCircleIcon, Schedule as ScheduleIcon, Phone as PhoneIcon,
+  Timeline as TimelineIcon, Visibility as VisibilityIcon, VisibilityOff as VisibilityOffIcon,
+  Map as MapIcon, People as PeopleIcon, TrendingUp as TrendingUpIcon,
+  LocationCity as LocationCityIcon, Refresh as RefreshIcon, DateRange as DateRangeIcon,
+  ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, MyLocation as MyLocationIcon,
+  GetApp as GetAppIcon, SmartToy as SmartToyIcon, ExpandMore as ExpandMoreIcon,
+  MoreVert as MoreVertIcon, ClearAll as ClearAllIcon, Layers as LayersIcon,
+  Print as PrintIcon, Share as ShareIcon, NotificationsActive as AlertIcon,
 } from '@mui/icons-material';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { createTheme, ThemeProvider, useTheme } from '@mui/material/styles';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { format, subDays, isSameDay } from 'date-fns';
+import { format, isSameDay, isAfter, isBefore } from 'date-fns';
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, onValue, off, update } from 'firebase/database';
 import axios from 'axios';
-import { GoogleMap, LoadScript, Marker, InfoWindow } from '@react-google-maps/api';
-import { pdf, Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { GoogleMap, LoadScript, Marker, InfoWindow, HeatmapLayer } from '@react-google-maps/api';
+import { pdf, Document, Page, Text, View, StyleSheet as PDFStyles } from '@react-pdf/renderer';
 
-// Configuração do Firebase
+// ─── Firebase ─────────────────────────────────────────────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyBtnU84zOmm9mjwJNf7Sa7g4exGjUI_kj0",
   authDomain: "vigicolera.firebaseapp.com",
@@ -36,32 +43,58 @@ const firebaseConfig = {
   projectId: "vigicolera",
   storageBucket: "vigicolera.firebasestorage.app",
   messagingSenderId: "443742285213",
-  appId: "1:443742285213:web:ce5c8ef141c46ed2ccd374"
+  appId: "1:443742285213:web:ce5c8ef141c46ed2ccd374",
 };
+const firebaseApp = initializeApp(firebaseConfig);
+const database = getDatabase(firebaseApp);
+const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyDEyAiggQthZ3AibDKDY9UNBoypYYamKBo';
+const MAPS_LIBS = ['visualization'];
 
-const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
+// ─── Google Maps Light Style ──────────────────────────────────────────────────
+const GM_LIGHT = [
+  { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e5f5e0' }] },
+  { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#4a7c59' }] },
+  { featureType: 'poi.medical', elementType: 'geometry', stylers: [{ color: '#fce8e8' }] },
+  { featureType: 'poi.school', elementType: 'geometry', stylers: [{ color: '#fff9c4' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+  { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#ffd54f' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#f9a825' }] },
+  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+  { featureType: 'road.local', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#aee0f4' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#2196f3' }] },
+  { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#e8f5e9' }] },
+  { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#e5e5e5' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#bdbdbd' }] },
+  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#484848' }] },
+  { featureType: 'administrative.neighborhood', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+];
 
-const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyDEyAiggQthZ3AibDKDY9UNBoypYYamKBo';
-
+// ─── Tema ─────────────────────────────────────────────────────────────────────
 const darkTheme = createTheme({
   palette: {
     mode: 'dark',
-    primary: { main: '#2196f3' },
-    secondary: { main: '#00e5ff' },
-    background: { default: '#0a0a0a', paper: '#1a1a1a' },
-    error: { main: '#ff5252' },
-    warning: { main: '#ffab40' },
-    success: { main: '#69f0ae' },
-    info: { main: '#40c4ff' },
+    primary:    { main: '#1a73e8' },
+    secondary:  { main: '#00bcd4' },
+    background: { default: '#0a0a0a', paper: '#141414' },
+    error:      { main: '#ea4335' },
+    warning:    { main: '#fbbc05' },
+    success:    { main: '#34a853' },
+    info:       { main: '#4285f4' },
   },
   components: {
     MuiCard: {
       styleOverrides: {
         root: {
-          backgroundImage: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          backgroundImage: 'linear-gradient(135deg,rgba(255,255,255,0.07) 0%,rgba(255,255,255,0.03) 100%)',
+          border: '1px solid rgba(255,255,255,0.09)',
           borderRadius: 12,
         },
       },
@@ -70,141 +103,63 @@ const darkTheme = createTheme({
       styleOverrides: {
         root: {
           backdropFilter: 'blur(20px)',
-          backgroundColor: 'rgba(10, 10, 10, 0.95)',
-          borderBottom: '1px solid rgba(255,255,255,0.1)',
+          backgroundColor: 'rgba(8,8,8,0.97)',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
         },
       },
     },
-    MuiTypography: {
-      defaultProps: { component: 'div' }
-    }
+    MuiTypography: { defaultProps: { component: 'div' } },
   },
 });
 
-// Estilos do PDF
-const pdfStyles = StyleSheet.create({
-  page: { padding: 30, fontSize: 11, fontFamily: 'Helvetica' },
-  title: { fontSize: 24, marginBottom: 10, textAlign: 'center', fontWeight: 'bold' },
-  subtitle: { fontSize: 14, marginBottom: 20, textAlign: 'center', color: '#555' },
-  sectionTitle: { fontSize: 16, margin: '20px 0 10px', fontWeight: 'bold' },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 20 },
-  statBox: { 
-    width: '23%', 
-    padding: 10, 
-    border: '1px solid #ddd', 
-    borderRadius: 5, 
-    alignItems: 'center',
-    marginBottom: 10
-  },
-  statNumber: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  table: { width: 'auto', borderStyle: 'solid', borderWidth: 1, borderColor: '#bfbfbf', marginTop: 10 },
-  tableRow: { flexDirection: 'row' },
-  tableColHeader: { 
-    width: '10%', 
-    borderStyle: 'solid', 
-    borderWidth: 1, 
-    borderColor: '#bfbfbf', 
-    backgroundColor: '#2196f3', 
-    color: 'white',
-    textAlign: 'center',
-    padding: 8,
-    fontWeight: 'bold',
-    fontSize: 10
-  },
-  tableCol: { 
-    width: '10%', 
-    borderStyle: 'solid', 
-    borderWidth: 1, 
-    borderColor: '#bfbfbf', 
-    textAlign: 'center',
-    padding: 5,
-    fontSize: 9
-  },
-  tableColWide: { 
-    width: '15%', 
-    borderStyle: 'solid', 
-    borderWidth: 1, 
-    borderColor: '#bfbfbf', 
-    textAlign: 'center',
-    padding: 5,
-    fontSize: 9
-  },
+// ─── PDF ──────────────────────────────────────────────────────────────────────
+const PS = PDFStyles.create({
+  page:  { padding: 28, fontSize: 10, fontFamily: 'Helvetica' },
+  title: { fontSize: 20, marginBottom: 6, textAlign: 'center', fontWeight: 'bold' },
+  sub:   { fontSize: 11, marginBottom: 16, textAlign: 'center', color: '#666' },
+  h2:    { fontSize: 13, margin: '14px 0 8px', fontWeight: 'bold', color: '#1a73e8' },
+  row:   { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 6 },
+  box:   { width: '22%', padding: 8, border: '1px solid #ddd', borderRadius: 4, alignItems: 'center', marginBottom: 6, marginRight: '2%' },
+  num:   { fontSize: 18, fontWeight: 'bold', marginBottom: 3 },
+  tbl:   { borderStyle: 'solid', borderWidth: 1, borderColor: '#ccc', marginTop: 8 },
+  th:    { flex: 1, padding: 6, backgroundColor: '#1a73e8', color: 'white', fontWeight: 'bold', fontSize: 8, borderRight: '1px solid #aaa' },
+  td:    { flex: 1, padding: 4, fontSize: 7, borderRight: '1px solid #ccc', borderTop: '1px solid #ccc' },
+  thW:   { flex: 2, padding: 6, backgroundColor: '#1a73e8', color: 'white', fontWeight: 'bold', fontSize: 8 },
+  tdW:   { flex: 2, padding: 4, fontSize: 7, borderTop: '1px solid #ccc' },
+  ai:    { padding: 10, border: '1px solid #00bcd4', borderRadius: 5, backgroundColor: '#f0feff', marginBottom: 10 },
+  ait:   { fontSize: 9, lineHeight: 1.6, color: '#333' },
 });
 
-// Componente do documento PDF
-const RelatorioPDF = ({ casosFiltrados, stats, dateFilter, iaAnalise }) => (
+const RelatorioPDF = ({ casos, stats, filtros, ia }) => (
   <Document>
-    <Page size="A4" style={pdfStyles.page} orientation="landscape">
-      <Text style={pdfStyles.title}>Relatório de Monitoramento de Casos de Cólera</Text>
-      <Text style={pdfStyles.subtitle}>
-        Gerado em: {new Date().toLocaleString('pt-BR')}
-        {dateFilter && ` | Filtrado para: ${format(dateFilter, 'dd/MM/yyyy')}`}
-      </Text>
-
-      <Text style={pdfStyles.sectionTitle}>Estatísticas Resumo</Text>
-      <View style={pdfStyles.statsGrid}>
-        <View style={pdfStyles.statBox}>
-          <Text style={[pdfStyles.statNumber, { color: '#f44336' }]}>{stats.confirmados}</Text>
-          <Text>Casos Confirmados</Text>
-        </View>
-        <View style={pdfStyles.statBox}>
-          <Text style={[pdfStyles.statNumber, { color: '#ff9800' }]}>{stats.suspeitos}</Text>
-          <Text>Casos Suspeitos</Text>
-        </View>
-        <View style={pdfStyles.statBox}>
-          <Text style={[pdfStyles.statNumber, { color: '#2196f3' }]}>{stats.pendentes}</Text>
-          <Text>Casos Pendentes</Text>
-        </View>
-        <View style={pdfStyles.statBox}>
-          <Text style={[pdfStyles.statNumber, { color: '#4caf50' }]}>{stats.descartados}</Text>
-          <Text>Casos Descartados</Text>
-        </View>
-        <View style={pdfStyles.statBox}>
-          <Text style={[pdfStyles.statNumber]}>{stats.total}</Text>
-          <Text>Total de Casos</Text>
-        </View>
-        <View style={pdfStyles.statBox}>
-          <Text style={[pdfStyles.statNumber]}>{stats.bairros}</Text>
-          <Text>Bairros Afetados</Text>
-        </View>
+    <Page size="A4" orientation="landscape" style={PS.page}>
+      <Text style={PS.title}>Relatório VigiCólera Uige</Text>
+      <Text style={PS.sub}>Gerado: {new Date().toLocaleString('pt-AO')}{filtros.status !== 'todos' ? ` | Status: ${filtros.status}` : ''}{filtros.gravidade !== 'todos' ? ` | Gravidade: ${filtros.gravidade}` : ''}{filtros.bairro !== 'todos' ? ` | Bairro: ${filtros.bairro}` : ''}</Text>
+      <Text style={PS.h2}>Resumo Estatístico</Text>
+      <View style={PS.row}>
+        {[['Confirmados',stats.confirmados,'#ea4335'],['Suspeitos',stats.suspeitos,'#fbbc05'],['Pendentes',stats.pendentes,'#1a73e8'],['Descartados',stats.descartados,'#34a853'],['Total',stats.total,'#212121'],['Bairros',stats.bairros,'#1a73e8'],['Críticos',stats.criticos,'#b71c1c']].map(([l,v,c])=>(
+          <View key={l} style={PS.box}><Text style={[PS.num,{color:c}]}>{v}</Text><Text>{l}</Text></View>
+        ))}
       </View>
-
-      {iaAnalise && (
-        <>
-          <Text style={pdfStyles.sectionTitle}>Insights e Análise Inteligente (IA)</Text>
-          <View style={{ marginBottom: 20 }}>
-            <Text style={{ fontSize: 12, lineHeight: 1.5 }}>{iaAnalise}</Text>
-          </View>
-        </>
-      )}
-
-      <Text style={pdfStyles.sectionTitle}>Lista de Casos Registrados ({casosFiltrados.length})</Text>
-      <View style={pdfStyles.table}>
-        <View style={pdfStyles.tableRow}>
-          <Text style={pdfStyles.tableColHeader}>ID</Text>
-          <Text style={pdfStyles.tableColHeader}>Agente</Text>
-          <Text style={pdfStyles.tableColHeader}>Bairro</Text>
-          <Text style={pdfStyles.tableColHeader}>Status</Text>
-          <Text style={pdfStyles.tableColHeader}>Gravidade</Text>
-          <Text style={pdfStyles.tableColHeader}>Data/Hora</Text>
-          <Text style={pdfStyles.tableColHeader}>Dispositivo</Text>
-          <Text style={[pdfStyles.tableColHeader, { width: '12%' }]}>Latitude</Text>
-          <Text style={[pdfStyles.tableColHeader, { width: '12%' }]}>Longitude</Text>
-          <Text style={pdfStyles.tableColWide}>Notas</Text>
+      {ia ? (<><Text style={PS.h2}>Análise IA</Text><View style={PS.ai}><Text style={PS.ait}>{ia}</Text></View></>) : null}
+      <Text style={PS.h2}>Casos Registados ({casos.length})</Text>
+      <View style={PS.tbl}>
+        <View style={{flexDirection:'row'}}>
+          {['ID','Agente','Bairro','Status','Gravidade','Data/Hora','Dispositivo','Lat','Lng'].map(h=><Text key={h} style={PS.th}>{h}</Text>)}
+          <Text style={PS.thW}>Notas</Text>
         </View>
-
-        {casosFiltrados.map((caso) => (
-          <View style={pdfStyles.tableRow} key={caso.id}>
-            <Text style={pdfStyles.tableCol}>{caso.id}</Text>
-            <Text style={pdfStyles.tableCol}>{caso.agente}</Text>
-            <Text style={pdfStyles.tableCol}>{caso.bairro || 'Desconhecido'}</Text>
-            <Text style={pdfStyles.tableCol}>{caso.status}</Text>
-            <Text style={pdfStyles.tableCol}>{caso.gravidade}</Text>
-            <Text style={pdfStyles.tableCol}>{caso.dataHora}</Text>
-            <Text style={pdfStyles.tableCol}>{caso.dispositivo}</Text>
-            <Text style={pdfStyles.tableCol}>{caso.coordenadas.lat.toFixed(6)}</Text>
-            <Text style={pdfStyles.tableCol}>{caso.coordenadas.lng.toFixed(6)}</Text>
-            <Text style={pdfStyles.tableColWide}>{caso.notas || '-'}</Text>
+        {casos.slice(0,200).map(c=>(
+          <View key={c.id} style={{flexDirection:'row'}}>
+            <Text style={PS.td}>{c.id}</Text>
+            <Text style={PS.td}>{c.agente}</Text>
+            <Text style={PS.td}>{c.bairro||'—'}</Text>
+            <Text style={PS.td}>{c.status}</Text>
+            <Text style={PS.td}>{c.gravidade}</Text>
+            <Text style={PS.td}>{c.dataHora}</Text>
+            <Text style={PS.td}>{c.dispositivo}</Text>
+            <Text style={PS.td}>{c.coordenadas.lat.toFixed(5)}</Text>
+            <Text style={PS.td}>{c.coordenadas.lng.toFixed(5)}</Text>
+            <Text style={PS.tdW}>{c.notas||'—'}</Text>
           </View>
         ))}
       </View>
@@ -212,1677 +167,1073 @@ const RelatorioPDF = ({ casosFiltrados, stats, dateFilter, iaAnalise }) => (
   </Document>
 );
 
-// Funções utilitárias
-const getStatusColor = (status) => {
-  switch (status) {
-    case 'confirmado': return '#ff5252';
-    case 'suspeito': return '#ffab40';
-    case 'pendente-analise': return '#40c4ff';
-    case 'descartado': return '#69f0ae';
-    default: return '#757575';
-  }
+// ─── Utilitários ──────────────────────────────────────────────────────────────
+const SC = { confirmado:'#ea4335', suspeito:'#fbbc05', 'pendente-analise':'#4285f4', descartado:'#34a853' };
+const GC = { critico:'#b71c1c', severa:'#e65100', moderada:'#f9a825', leve:'#2e7d32' };
+const SI = { confirmado:<WarningIcon/>, suspeito:<ScheduleIcon/>, 'pendente-analise':<TimelineIcon/>, descartado:<CheckCircleIcon/> };
+const SP = { confirmado:'!', suspeito:'?', 'pendente-analise':'·', descartado:'✓' };
+
+const sc = s => SC[s]||'#9e9e9e';
+const gc = g => GC[g]||'#616161';
+
+const buildPin = (color, label, size=36) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size*1.4}" viewBox="0 0 36 50"><defs><filter id="f"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,.35)"/></filter></defs><path d="M18 0C8.06 0 0 8.06 0 18c0 13.5 18 32 18 32S36 31.5 36 18C36 8.06 27.94 0 18 0z" fill="${color}" stroke="white" stroke-width="1.5" filter="url(#f)"/><circle cx="18" cy="18" r="10" fill="white" opacity=".9"/><text x="18" y="23" text-anchor="middle" font-size="11" font-weight="bold" font-family="Arial" fill="${color}">${label||''}</text></svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg);
+};
+const buildCluster = (color, count, size=46) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><defs><filter id="s"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,.3)"/></filter></defs><circle cx="${size/2}" cy="${size/2}" r="${size/2-2}" fill="${color}" opacity=".18" filter="url(#s)"/><circle cx="${size/2}" cy="${size/2}" r="${size/2-7}" fill="${color}"/><circle cx="${size/2}" cy="${size/2}" r="${size/2-11}" fill="white" opacity=".22"/><text x="${size/2}" y="${size/2+5}" text-anchor="middle" font-size="${count>99?9:12}" font-weight="bold" font-family="Arial" fill="white">${count>99?'99+':count}</text></svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg);
 };
 
-const getGravidadeColor = (gravidade) => {
-  switch (gravidade) {
-    case 'critico': return '#d32f2f';
-    case 'severa': return '#f57c00';
-    case 'moderada': return '#ffb300';
-    case 'leve': return '#7cb342';
-    default: return '#616161';
-  }
-};
+const fdt = str => { try { const [d,t]=str.split(', '); return {date:d,time:t}; } catch { return {date:'—',time:'—'}; } };
 
-const getStatusIcon = (status) => {
-  switch (status) {
-    case 'confirmado': return <WarningIcon />;
-    case 'suspeito': return <ScheduleIcon />;
-    case 'pendente-analise': return <TimelineIcon />;
-    case 'descartado': return <CheckCircleIcon />;
-    default: return <LocationIcon />;
-  }
-};
+const groupByBairro = casos => casos.reduce((acc,c)=>{
+  const b = c.bairro||'Desconhecido';
+  if(!acc[b]) acc[b]={casos:[],confirmados:0,suspeitos:0,pendentes:0,descartados:0,coordenadas:c.coordenadas};
+  acc[b].casos.push(c);
+  if(c.status==='confirmado') acc[b].confirmados++;
+  else if(c.status==='suspeito') acc[b].suspeitos++;
+  else if(c.status==='pendente-analise') acc[b].pendentes++;
+  else acc[b].descartados++;
+  return acc;
+},{});
 
-const formatDateTime = (dateTimeString) => {
+const getBairro = async (lat,lng,key) => {
   try {
-    const [date, time] = dateTimeString.split(', ');
-    return { date, time };
-  } catch (error) {
-    console.error('Erro ao formatar data/hora:', error);
-    return { date: 'Desconhecido', time: 'Desconhecido' };
-  }
-};
-
-const agruparPorBairro = (casos) => {
-  return casos.reduce((acc, caso) => {
-    const bairro = caso.bairro || 'Desconhecido';
-    if (!acc[bairro]) {
-      acc[bairro] = {
-        casos: [],
-        confirmados: 0,
-        suspeitos: 0,
-        pendentes: 0,
-        descartados: 0,
-        coordenadas: caso.coordenadas,
-        descricao: caso.descricao || `Bairro ${bairro} localizado na região central.`
-      };
+    const r = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`);
+    for(const res of r.data.results||[]){
+      const n=res.address_components.find(c=>c.types.includes('neighborhood')||c.types.includes('sublocality'));
+      if(n) return n.long_name;
     }
-    acc[bairro].casos.push(caso);
-    if (caso.status === 'confirmado') acc[bairro].confirmados++;
-    if (caso.status === 'suspeito') acc[bairro].suspeitos++;
-    if (caso.status === 'pendente-analise') acc[bairro].pendentes++;
-    if (caso.status === 'descartado') acc[bairro].descartados++;
-    return acc;
-  }, {});
+    const l=r.data.results?.[0]?.address_components.find(c=>c.types.includes('locality'));
+    return l?l.long_name:'Desconhecido';
+  } catch { return 'Desconhecido'; }
 };
 
-const getBairroFromCoordinates = async (lat, lng, apiKey, addNotification) => {
-  if (apiKey === 'SUA_CHAVE_API_AQUI') {
-    addNotification('Chave da API do Google Maps não configurada', 'error');
-    return 'Desconhecido';
-  }
+const gerarIA = (stats,grupos,casos) => {
+  const {total,confirmados,bairros} = stats;
+  const taxa = total>0?((confirmados/total)*100).toFixed(1):0;
+  const risco = confirmados>total*0.4?'ALTO':confirmados>total*0.2?'MODERADO':'CONTROLADO';
+  const emoji = {ALTO:'🔴',MODERADO:'🟡',CONTROLADO:'🟢'}[risco];
+  const focos = Object.entries(grupos).filter(([,g])=>g.confirmados>0||g.casos.length>3).sort(([,a],[,b])=>b.confirmados-a.confirmados).slice(0,5).map(([b,g])=>`  • ${b}: ${g.casos.length} casos (${g.confirmados} conf.)`).join('\n');
+  const media = casos.length>0?(casos.length/Math.max(1,Math.ceil((Date.now()-Math.min(...casos.map(c=>c.timestamp)))/86400000))).toFixed(1):0;
+  const recs = {ALTO:'  1. Activar resposta de emergência\n  2. Distribuição de hipoclorito\n  3. Alertar MINSA\n  4. Intensificar vacinação oral\n  5. Isolar fontes contaminadas',MODERADO:'  1. Reforçar brigadas de vigilância\n  2. Campanhas de higiene e saneamento\n  3. Preparar stocks de medicamentos\n  4. Informar comunidades afetadas\n  5. Monitorar casos diariamente',CONTROLADO:'  1. Manter vigilância epidemiológica\n  2. Continuar campanhas preventivas\n  3. Avaliar áreas de risco potencial\n  4. Garantir stocks de materiais\n  5. Sensibilização contínua'}[risco];
+  return `NÍVEL DE RISCO: ${risco}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n ESTATÍSTICAS GERAIS\n  • Total de casos: ${total}\n  • Confirmados: ${confirmados} (${taxa}%)\n  • Bairros afetados: ${bairros}\n  • Média p/bairro: ${total>0?(total/Math.max(bairros,1)).toFixed(1):0} casos\n  • Média diária estimada: ${media} casos/dia\n\n FOCOS CRÍTICOS\n${focos||'  Sem focos críticos identificados'}\n\n ANÁLISE DE TENDÊNCIA\n  ${casos.length>50?'Surto em expansão — focos periféricos activos. Estação chuvosa potencia propagação.':casos.length>20?'Surto activo — controlo parcial. Vigilância intensificada necessária.':'Situação sob vigilância — casos isolados. Monitoramento preventivo recomendado.'}\n\n RECOMENDAÇÕES PRIORITÁRIAS\n${recs}\n\n CONTEXTO REGIONAL\n  Surto jan/2025: +28.000 casos em 18/21 províncias Uigenas\n  Fonte: OMS / UNICEF / MINSA Uige 2025\n\n Atualizado: ${new Date().toLocaleString('pt-AO')}`;
+};
 
-  try {
-    const response = await axios.get(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`
-    );
-    const results = response.data.results;
 
-    if (results.length > 0) {
-      for (const result of results) {
-        const neighborhood = result.address_components.find(
-          (component) =>
-            component.types.includes('neighborhood') ||
-            component.types.includes('sublocality')
-        );
-        if (neighborhood) {
-          return neighborhood.long_name;
-        }
+const MemoizedMap = React.memo(({center,zoom,mapType,viewMode,showHeatmap,grupos,casos,infoId,onCase,onGroup,onClose})=>{
+  // Estado local para controlar o hover
+  const [hoveredId, setHoveredId] = useState(null);
+  const [hoverTimeout, setHoverTimeout] = useState(null);
+
+  const pinFor = useCallback(caso=>({
+    url: buildPin(sc(caso.status),SP[caso.status]||'?',36),
+    scaledSize: window.google?.maps ? new window.google.maps.Size(36, 50) : undefined,
+    anchor: window.google?.maps ? new window.google.maps.Point(18, 50) : undefined,
+  }),[]);
+
+  const clusterFor = useCallback(g=>{
+    const color = g.confirmados>0?'#ea4335':g.suspeitos>0?'#fbbc05':'#4285f4';
+    const sz = Math.min(46+g.casos.length*2,72);
+    return {
+      url: buildCluster(color,g.casos.length,sz),
+      scaledSize: window.google?.maps ? new window.google.maps.Size(sz, sz) : undefined,
+      anchor: window.google?.maps ? new window.google.maps.Point(sz/2, sz/2) : undefined,
+    };
+  },[]);
+
+  const heatData = useMemo(()=>
+    window.google?.maps ? casos.filter(c=>c.status==='confirmado').map(c=>new window.google.maps.LatLng(c.coordenadas.lat, c.coordenadas.lng)) : []
+  ,[casos]);
+
+  // Handler para mostrar info no hover com delay
+  const handleMouseOver = useCallback((id) => {
+    if (hoverTimeout) clearTimeout(hoverTimeout);
+    const timeout = setTimeout(() => {
+      setHoveredId(id);
+    }, 300); // delay de 300ms para evitar flicker
+    setHoverTimeout(timeout);
+  }, [hoverTimeout]);
+
+  const handleMouseOut = useCallback(() => {
+    if (hoverTimeout) {
+      clearTimeout(hoverTimeout);
+      setHoverTimeout(null);
+    }
+    setHoveredId(null);
+  }, [hoverTimeout]);
+
+  // Limpar timeout quando o componente desmontar
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout) {
+        clearTimeout(hoverTimeout);
       }
-      const locality = results[0].address_components.find((component) =>
-        component.types.includes('locality')
-      );
-      return locality ? locality.long_name : 'Desconhecido';
-    }
-    return 'Desconhecido';
-  } catch (error) {
-    console.error('Erro na geocodificação:', error);
-    addNotification('Erro ao obter bairro a partir das coordenadas', 'error');
-    return 'Desconhecido';
-  }
-};
-
-const updateBairro = async (database, casoId, bairro) => {
-  try {
-    const casoRef = ref(database, `casos-colera/${casoId}`);
-    await update(casoRef, { bairro });
-  } catch (error) {
-    console.error('Erro ao atualizar bairro no Firebase:', error);
-  }
-};
-
-// Função aprimorada para gerar insights e análise IA com dados reais do surto de 2025
-const gerarInsightsIA = (stats, gruposBairro, casos) => {
-  const totalCasos = stats.total;
-  const confirmados = stats.confirmados;
-  const bairrosAfetados = stats.bairros;
-
-  const bairrosCriticos = Object.entries(gruposBairro)
-    .filter(([_, grupo]) => grupo.confirmados > 0 || grupo.casos.length > 5)
-    .map(([bairro]) => bairro)
-    .join(', ');
-
-  let risco = 'moderado';
-  if (confirmados > totalCasos * 0.4) risco = 'alto';
-  else if (confirmados > totalCasos * 0.2) risco = 'moderado';
-  else risco = 'controlado';
-
-  const tendencias = casos.length > 50 ? 'Aumento recente em bairros periféricos devido à estação chuvosa.' : 'Casos concentrados em áreas urbanas densas.';
-
-  return `
-📊 **ANÁLISE INTELIGENTE DO SURTO - VigiCólera AI**
-
-## 📈 ESTATÍSTICAS PRINCIPAIS
-• **Total de casos registrados:** ${totalCasos}
-• **Casos confirmados:** ${confirmados} (${totalCasos > 0 ? ((confirmados / totalCasos) * 100).toFixed(1) : 0}% do total)
-• **Bairros afetados:** ${bairrosAfetados}
-• **Densidade de casos:** ${(totalCasos / Math.max(bairrosAfetados, 1)).toFixed(1)} casos por bairro
-
-## 🎯 ÁREAS DE ALERTA
-${bairrosCriticos ? 
-  `**Bairros críticos detectados:** ${bairrosCriticos}\n- Necessitam de intervenção prioritária` : 
-  'Distribuição dispersa, sem clusters graves identificados'}
-
-## 📊 ANÁLISE DE RISCO
-**Nível de risco:** ${risco.toUpperCase()}
-**Tendência:** ${tendencias}
-**Foco atual:** ${bairrosCriticos ? 'Contenção em áreas críticas' : 'Vigilância ampliada'}
-
-## 🚨 RECOMENDAÇÕES IA
-${risco === 'alto' ? 
-`• **Alerta máximo:** Mobilizar equipes de resposta rápida
-• **Distribuição:** Hipoclorito em massa nas áreas críticas
-• **Comunicação:** Alertar autoridades nacionais imediatamente
-• **Ações:** Intensificar vacinação e desinfecção de fontes de água` : 
-risco === 'moderado' ? 
-`• **Monitoramento intensivo:** Reforçar vigilância nos bairros afetados
-• **Prevenção:** Campanhas de higiene e tratamento de água
-• **Preparação:** Recursos prontos para possível escalada
-• **Comunicação:** Mantenha a população informada` : 
-`• **Vigilância ativa:** Monitoramento diário mantido
-• **Educação:** Continuar campanhas comunitárias
-• **Expansão:** Avaliar cobertura em novas áreas
-• **Prevenção:** Manter estoques de suprimentos`}
-
----
-
-**ℹ️ Contexto Nacional (Dados OMS/UNICEF 2025):**
-O surto iniciado em janeiro 2025 afetou 18 das 21 províncias angolanas, com mais de 28.000 casos reportados. O sistema VigiCólera monitora em tempo real para resposta rápida e eficaz.
-
-**📅 Última atualização:** ${new Date().toLocaleString('pt-BR')}
-  `.trim();
-};
-
-// Componente memoizado do Mapa
-const MemoizedMap = React.memo(({ 
-  mapCenter, 
-  mapZoom, 
-  mapType, 
-  viewMode, 
-  gruposBairro, 
-  casosFiltrados, 
-  selectedInfoWindow,
-  onMarkerClick,
-  onGroupClick,
-  onInfoWindowClose
-}) => {
-  const mapRef = useRef(null);
-  
-  const handleLoad = useCallback((map) => {
-    mapRef.current = map;
-  }, []);
-
-  const getMarkerIcon = useCallback((caso) => {
-    const iconUrl = `http://maps.google.com/mapfiles/ms/icons/${
-      caso.status === 'confirmado' ? 'red-dot' :
-      caso.status === 'suspeito' ? 'yellow-dot' :
-      caso.status === 'pendente-analise' ? 'blue-dot' : 'green-dot'
-    }.png`;
-    
-    return {
-      url: iconUrl,
-      scaledSize: window.google?.maps ? new window.google.maps.Size(40, 40) : undefined
     };
-  }, []);
-
-  const getGroupMarkerIcon = useCallback((grupo) => {
-    const iconUrl = `http://maps.google.com/mapfiles/ms/icons/${
-      grupo.confirmados > 0 ? 'red-dot' : grupo.suspeitos > 0 ? 'yellow-dot' : 'blue-dot'
-    }.png`;
-    
-    const size = 40 + Math.min(grupo.casos.length * 2, 30);
-    return {
-      url: iconUrl,
-      scaledSize: window.google?.maps ? new window.google.maps.Size(size, size) : undefined
-    };
-  }, []);
+  }, [hoverTimeout]);
 
   return (
     <GoogleMap
-      mapContainerStyle={{ width: '100%', height: '100%' }}
-      center={mapCenter}
-      zoom={mapZoom}
-      mapTypeId={mapType}
-      onLoad={handleLoad}
+      mapContainerStyle={{width:'100%',height:'100%'}}
+      center={center} zoom={zoom} mapTypeId={mapType}
       options={{
-        styles: [
-          {
-            elementType: "geometry",
-            stylers: [{ color: "#242f3e" }]
-          },
-          {
-            elementType: "labels.text.fill",
-            stylers: [{ color: "#FFFFFF" }, { visibility: "on" }]
-          },
-          {
-            elementType: "labels.text.stroke",
-            stylers: [{ color: "#000000" }, { weight: 2 }]
-          }
-        ]
+        styles: mapType==='roadmap'?GM_LIGHT:[],
+        disableDefaultUI:true,
+        clickableIcons:true,
+        gestureHandling:'greedy',
       }}
     >
-      {viewMode === 'agrupado' ? (
-        Object.entries(gruposBairro).map(([bairro, grupo]) => (
-          <Marker
-            key={`grupo-${bairro}`}
-            position={grupo.coordenadas}
-            onClick={() => onGroupClick(bairro, grupo)}
-            icon={getGroupMarkerIcon(grupo)}
-            animation={window.google?.maps?.Animation?.DROP}
+      {showHeatmap && heatData.length > 0 && 
+        <HeatmapLayer data={heatData} options={{radius:30, opacity:.7}} />
+      }
+
+      {viewMode==='agrupado'
+        ? Object.entries(grupos).map(([b,g]) => (
+          <Marker 
+            key={`g-${b}`} 
+            position={g.coordenadas} 
+            icon={clusterFor(g)} 
+            onClick={()=>onGroup(b,g)}
+            onMouseOver={() => handleMouseOver(`g-${b}`)}
+            onMouseOut={handleMouseOut}
           >
-            {selectedInfoWindow === `grupo-${bairro}` && (
-              <InfoWindow onCloseClick={onInfoWindowClose}>
-                <Box sx={{ p: 1, maxWidth: 250 }}>
-                  <Typography variant="subtitle2" fontWeight="bold" color="primary.main">
-                    {bairro}
+            {/* Mostrar info no hover OU no clique */}
+            {(hoveredId === `g-${b}` || infoId === `g-${b}`) && (
+              <InfoWindow 
+                onCloseClick={onClose}
+                position={g.coordenadas}
+                options={window.google?.maps ? {
+                  pixelOffset: new window.google.maps.Size(0, -30)
+                } : undefined}
+              >
+                <Box sx={{p:1, maxWidth:220, color:'#212121'}}>
+                  <Typography variant="subtitle2" sx={{color:'#1a73e8', fontWeight:700, mb:1}}>
+                    📍 {b}
                   </Typography>
-                  <Box sx={{ mt: 1 }}>
-                    <Chip label={`${grupo.casos.length} casos`} size="small" sx={{ mr: 1, mb: 1 }} />
-                    {grupo.confirmados > 0 && (
-                      <Chip label={`${grupo.confirmados} confirmados`} size="small" color="error" sx={{ mr: 1, mb: 1 }} />
-                    )}
-                    {grupo.suspeitos > 0 && (
-                      <Chip label={`${grupo.suspeitos} suspeitos`} size="small" color="warning" sx={{ mr: 1, mb: 1 }} />
-                    )}
+                  <Box sx={{display:'flex', gap:.4, flexWrap:'wrap', mb:1}}>
+                    <Chip 
+                      label={`${g.casos.length} total`} 
+                      size="small" 
+                      sx={{bgcolor:'#e8f0fe', color:'#1a73e8', fontSize:'0.65rem'}}
+                    />
+                    {g.confirmados > 0 && 
+                      <Chip 
+                        label={`${g.confirmados} conf.`} 
+                        size="small" 
+                        sx={{bgcolor:'#fce8e6', color:'#ea4335', fontSize:'0.65rem'}}
+                      />
+                    }
+                    {g.suspeitos > 0 && 
+                      <Chip 
+                        label={`${g.suspeitos} susp.`} 
+                        size="small" 
+                        sx={{bgcolor:'#fef7e0', color:'#f9ab00', fontSize:'0.65rem'}}
+                      />
+                    }
+                    {g.pendentes > 0 && 
+                      <Chip 
+                        label={`${g.pendentes} pend.`} 
+                        size="small" 
+                        sx={{bgcolor:'#e8f0fe', color:'#4285f4', fontSize:'0.65rem'}}
+                      />
+                    }
                   </Box>
-                  <Typography variant="body2" sx={{ mt: 1 }}>
-                    {grupo.descricao}
+                  <Typography sx={{fontSize:'0.7rem', color:'#5f6368', mt:.5}}>
+                    <strong>Clique para ver detalhes</strong>
                   </Typography>
                 </Box>
               </InfoWindow>
             )}
           </Marker>
         ))
-      ) : (
-        casosFiltrados.map((caso) => (
-          <Marker
-            key={`marker-${caso.id}`}
-            position={caso.coordenadas}
-            onClick={() => onMarkerClick(caso)}
-            icon={getMarkerIcon(caso)}
+        : casos.map(caso => (
+          <Marker 
+            key={`c-${caso.id}`} 
+            position={caso.coordenadas} 
+            icon={pinFor(caso)} 
+            onClick={() => onCase(caso)}
+            onMouseOver={() => handleMouseOver(caso.id)}
+            onMouseOut={handleMouseOut}
             animation={window.google?.maps?.Animation?.DROP}
           >
-            {selectedInfoWindow === caso.id && (
-              <InfoWindow onCloseClick={onInfoWindowClose}>
-                <Box sx={{ p: 1, maxWidth: 250 }}>
-                  <Typography variant="subtitle2" fontWeight="bold" color="primary.main">
+            {/* Mostrar info no hover OU no clique */}
+            {(hoveredId === caso.id || infoId === caso.id) && (
+              <InfoWindow 
+                onCloseClick={onClose}
+                position={caso.coordenadas}
+                options={window.google?.maps ? {
+                  pixelOffset: new window.google.maps.Size(0, -30)
+                } : undefined}
+              >
+                <Box sx={{p:1, maxWidth:220, color:'#212121'}}>
+                  <Typography variant="subtitle2" sx={{color:'#1a73e8', fontWeight:700, mb:.5}}>
                     {caso.bairro || 'Sem bairro'}
                   </Typography>
-                  <Box sx={{ mt: 1 }}>
+                  
+                  <Box sx={{display:'flex', gap:.4, mb:.8, flexWrap:'wrap'}}>
                     <Chip 
                       label={caso.status} 
                       size="small" 
-                      sx={{ 
-                        bgcolor: getStatusColor(caso.status),
-                        color: 'white',
-                        mr: 1,
-                        mb: 1
-                      }} 
+                      sx={{
+                        bgcolor:sc(caso.status), 
+                        color:'white', 
+                        fontSize:'0.62rem',
+                        textTransform: 'capitalize'
+                      }}
                     />
                     <Chip 
                       label={caso.gravidade} 
                       size="small" 
-                      sx={{ 
-                        bgcolor: getGravidadeColor(caso.gravidade),
-                        color: 'white',
-                        mb: 1
-                      }} 
+                      sx={{
+                        bgcolor:gc(caso.gravidade), 
+                        color:'white', 
+                        fontSize:'0.62rem',
+                        textTransform: 'capitalize'
+                      }}
                     />
                   </Box>
-                  <Typography variant="body2">
-                    <strong>Agente:</strong> {caso.agente}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Data:</strong> {formatDateTime(caso.dataHora).date} às {formatDateTime(caso.dataHora).time}
-                  </Typography>
-                  {caso.descricao && (
-                    <Typography variant="body2" sx={{ mt: 1 }}>
-                      {caso.descricao}
+
+                  <Box sx={{mb:.5}}>
+                    <Typography sx={{fontSize:'0.73rem', color:'#5f6368'}}>
+                      <strong>👤 Agente:</strong> {caso.agente}
+                    </Typography>
+                    <Typography sx={{fontSize:'0.73rem', color:'#5f6368'}}>
+                      <strong>📅 Data:</strong> {fdt(caso.dataHora).date}
+                    </Typography>
+                    <Typography sx={{fontSize:'0.73rem', color:'#5f6368'}}>
+                      <strong>⏰ Hora:</strong> {fdt(caso.dataHora).time}
+                    </Typography>
+                  </Box>
+
+                  {caso.notas && (
+                    <Typography sx={{fontSize:'0.7rem', color:'#888', mt:.4, fontStyle:'italic'}}>
+                      📝 {caso.notas.length > 50 
+                        ? `${caso.notas.substring(0,50)}...` 
+                        : caso.notas}
                     </Typography>
                   )}
+
+                  <Typography sx={{fontSize:'0.65rem', color:'#1a73e8', mt:.5, textAlign:'center'}}>
+                    Clique para mais detalhes
+                  </Typography>
                 </Box>
               </InfoWindow>
             )}
           </Marker>
         ))
-      )}
+      }
     </GoogleMap>
   );
 });
 
+// Adicionar display name para melhor debug
 MemoizedMap.displayName = 'MemoizedMap';
 
-// Componente de Badge com Animação
-const AnimatedBadge = ({ badgeContent, children, color = 'error' }) => {
-  const [pulse, setPulse] = useState(false);
-
-  useEffect(() => {
-    if (badgeContent > 0) {
-      setPulse(true);
-      const timer = setTimeout(() => setPulse(false), 600);
-      return () => clearTimeout(timer);
-    }
-  }, [badgeContent]);
-
-  return (
-    <Badge 
-      badgeContent={badgeContent} 
-      color={color}
-      sx={{
-        '& .MuiBadge-badge': {
-          animation: pulse ? 'pulse 0.6s ease-in-out' : 'none',
-          '@keyframes pulse': {
-            '0%': { transform: 'scale(1)' },
-            '50%': { transform: 'scale(1.2)' },
-            '100%': { transform: 'scale(1)' }
-          }
-        }
-      }}
-    >
-      {children}
-    </Badge>
-  );
-};
-
-// Componente de Card Estatístico
-const StatCard = ({ title, value, color, icon, subtitle }) => (
-  <Card elevation={2} sx={{ 
-    p: 2, 
-    height: '100%',
-    transition: 'transform 0.2s',
-    '&:hover': {
-      transform: 'translateY(-4px)',
-      boxShadow: 6
-    }
-  }}>
-    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-      <Avatar sx={{ bgcolor: color, mr: 2 }}>
-        {icon}
-      </Avatar>
-      <Typography variant="subtitle2" color="text.secondary">
-        {title}
-      </Typography>
-    </Box>
-    <Typography variant="h4" fontWeight="bold" color={color}>
-      {value}
-    </Typography>
-    {subtitle && (
-      <Typography variant="caption" color="text.secondary">
-        {subtitle}
-      </Typography>
-    )}
-  </Card>
-);
-
+// ─── Componente Principal ─────────────────────────────────────────────────────
 export default function MapaCasos() {
-  const [casos, setCasos] = useState([]);
-  const [selectedCase, setSelectedCase] = useState(null);
-  const [filtroStatus, setFiltroStatus] = useState('todos');
-  const [filtroGravidade, setFiltroGravidade] = useState('todos');
-  const [busca, setBusca] = useState('');
-  const [showStatistics, setShowStatistics] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [mapCenter, setMapCenter] = useState({ lat: -7.6063, lng: 15.0548 });
-  const [notifications, setNotifications] = useState([]);
-  const [showNotification, setShowNotification] = useState(false);
-  const [mapZoom, setMapZoom] = useState(12);
-  const [showHeatmap, setShowHeatmap] = useState(false);
-  const [dateFilter, setDateFilter] = useState(null);
-  const [showDateFilter, setShowDateFilter] = useState(false);
-  const [viewMode, setViewMode] = useState('casos');
-  const [gruposBairro, setGruposBairro] = useState({});
-  const [mapType, setMapType] = useState('roadmap');
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [selectedInfoWindow, setSelectedInfoWindow] = useState(null);
-  const [showIAAnalysis, setShowIAAnalysis] = useState(false);
-  const [iaAnalise, setIaAnalise] = useState('');
-  // NOVO: Estado para controlar visibilidade da legenda
-  const [showLegend, setShowLegend] = useState(true);
+  const theme    = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm','lg'));
+  const isDesk   = useMediaQuery(theme.breakpoints.up('lg'));
 
-  const addNotification = useCallback((message, severity = 'info') => {
-    const newNotification = {
-      id: Date.now(),
-      message,
-      severity,
-      timestamp: new Date()
-    };
-    setNotifications((prev) => [...prev, newNotification]);
-    setShowNotification(true);
-  }, []);
+  // Dados
+  const [casos,setCasos]       = useState([]);
+  const [loading,setLoading]   = useState(false);
+  const [lastUpdate,setLast]   = useState(null);
 
-  useEffect(() => {
-    let isMounted = true;
+  // Filtros unificados — ÚNICO estado
+  const [F,setFiltros] = useState({ busca:'', status:'todos', gravidade:'todos', bairro:'todos', dateFrom:null, dateTo:null });
+  const setF = (k,v) => setFiltros(p=>({...p,[k]:v}));
+  const clearF = () => setFiltros({ busca:'', status:'todos', gravidade:'todos', bairro:'todos', dateFrom:null, dateTo:null });
+  const nActiveF = Object.entries(F).filter(([k,v])=>v&&v!=='todos'&&!(k==='busca'&&v==='')).length;
+
+  // Mapa
+  const [center,setCenter]   = useState({lat:-8.8368,lng:13.2343});
+  const [zoom,setZoom]       = useState(12);
+  const [mapType,setMapType] = useState('roadmap');
+  const [viewMode,setVM]     = useState('casos');
+  const [heatmap,setHeatmap] = useState(false);
+  const [infoId,setInfoId]   = useState(null);
+
+  // UI
+  const [sel,setSel]           = useState(null);
+  const [detailOpen,setDetail] = useState(false);
+  const [sidebar,setSidebar]   = useState(false);
+  const [showStats,setStats]   = useState(false);
+  const [showIA,setIA]         = useState(false);
+  const [legend,setLegend]     = useState(true);
+  const [moreAnchor,setMore]   = useState(null);
+  const [dateDlg,setDateDlg]   = useState(null);
+  const [notifs,setNotifs]     = useState([]);
+  const [showNotif,setShowN]   = useState(false);
+
+  useEffect(()=>{ setSidebar(isDesk); },[isDesk]);
+
+  const addN = useCallback((msg,sev='info')=>{
+    setNotifs(p=>[...p,{id:Date.now(),msg,sev}]);
+    setShowN(true);
+  },[]);
+
+  // Firebase
+  useEffect(()=>{
+    let alive=true;
     setLoading(true);
-
-    const casosRef = ref(database, 'casos-colera');
-
-    const unsubscribe = onValue(casosRef, async (snapshot) => {
-      if (!isMounted) return;
-
-      const data = snapshot.val();
-      if (data) {
-        const casosArray = Object.entries(data).map(([id, caso]) => ({
-          id,
-          agente: caso.agente || 'Desconhecido',
-          coordenadas: {
-            lat: parseFloat(caso.coordenadas?.lat) || 0,
-            lng: parseFloat(caso.coordenadas?.lng) || 0,
-            precisao: caso.coordenadas?.precisao || 100,
-          },
-          dataHora: caso.dataHora || 'Desconhecido',
-          dispositivo: caso.dispositivo || 'Desconhecido',
-          gravidade: caso.gravidade || 'Desconhecido',
-          status: caso.tipoCaso || 'pendente-analise',
-          timestamp: caso.timestamp || Date.now(),
-          tipoCaso: caso.tipoCaso || 'pendente-analise',
-          bairro: caso.bairro || 'Desconhecido',
-          notas: caso.notas || '',
-          descricao: caso.descricao || `Bairro ${caso.bairro || 'Desconhecido'} localizado na região central.`
-        }));
-
-        const casosComBairro = await Promise.all(
-          casosArray.map(async (caso) => {
-            if (caso.bairro === 'Desconhecido' && caso.coordenadas.lat && caso.coordenadas.lng) {
-              const bairro = await getBairroFromCoordinates(
-                caso.coordenadas.lat,
-                caso.coordenadas.lng,
-                googleMapsApiKey,
-                addNotification
-              );
-              if (bairro !== 'Desconhecido') {
-                await updateBairro(database, caso.id, bairro);
-              }
-              return { ...caso, bairro };
-            }
-            return caso;
-          })
-        );
-
-        if (isMounted) {
-          setCasos(casosComBairro);
-          addNotification('Dados carregados com sucesso', 'success');
+    const r=ref(database,'casos-colera');
+    const unsub=onValue(r,async snap=>{
+      if(!alive) return;
+      const data=snap.val();
+      if(!data){ setCasos([]); setLoading(false); return; }
+      const arr=Object.entries(data).map(([id,c])=>({
+        id, agente:c.agente||'Desconhecido',
+        coordenadas:{lat:parseFloat(c.coordenadas?.lat)||0,lng:parseFloat(c.coordenadas?.lng)||0,precisao:c.coordenadas?.precisao||100},
+        dataHora:c.dataHora||'—', dispositivo:c.dispositivo||'—', gravidade:c.gravidade||'leve',
+        status:c.tipoCaso||'pendente-analise', timestamp:c.timestamp||Date.now(), bairro:c.bairro||'Desconhecido', notas:c.notas||'',
+      }));
+      const enriched = await Promise.all(arr.map(async c=>{
+        if(c.bairro==='Desconhecido'&&c.coordenadas.lat&&c.coordenadas.lng){
+          const b=await getBairro(c.coordenadas.lat,c.coordenadas.lng,MAPS_KEY);
+          if(b!=='Desconhecido'){ try{await update(ref(database,`casos-colera/${c.id}`),{bairro:b});}catch{} }
+          return {...c,bairro:b};
         }
-      } else {
-        if (isMounted) {
-          setCasos([]);
-          addNotification('Nenhum dado encontrado', 'warning');
-        }
-      }
-      if (isMounted) setLoading(false);
-    }, (error) => {
-      if (isMounted) {
-        console.error('Erro ao buscar dados do Firebase:', error);
-        addNotification('Erro ao carregar dados', 'error');
-        setLoading(false);
-      }
-    });
+        return c;
+      }));
+      if(alive){ setCasos(enriched); setLast(new Date()); setLoading(false); addN(`${enriched.length} casos carregados`,'success'); }
+    },err=>{ if(alive){addN('Erro: '+err.message,'error');setLoading(false);} });
+    return()=>{ alive=false; unsub(); off(r); };
+  },[addN]);
 
-    return () => {
-      isMounted = false;
-      unsubscribe();
-      off(casosRef);
-    };
-  }, [addNotification]);
+  const grupos    = useMemo(()=>groupByBairro(casos),[casos]);
+  const bairroOpts = useMemo(()=>['todos',...Object.keys(grupos).sort()],[grupos]);
 
-  useEffect(() => {
-    setGruposBairro(agruparPorBairro(casos));
-  }, [casos]);
+  const casosF = useMemo(()=>casos.filter(c=>{
+    const q=F.busca.toLowerCase();
+    if(q&&!c.agente.toLowerCase().includes(q)&&!c.id.toLowerCase().includes(q)&&!c.bairro?.toLowerCase().includes(q)&&!c.notas?.toLowerCase().includes(q)) return false;
+    if(F.status!=='todos'&&c.status!==F.status) return false;
+    if(F.gravidade!=='todos'&&c.gravidade!==F.gravidade) return false;
+    if(F.bairro!=='todos'&&c.bairro!==F.bairro) return false;
+    if(F.dateFrom&&isBefore(new Date(c.timestamp),F.dateFrom)) return false;
+    if(F.dateTo&&isAfter(new Date(c.timestamp),F.dateTo)) return false;
+    return true;
+  }),[casos,F]);
 
-  const casosFiltrados = useMemo(() => {
-    return casos.filter((caso) => {
-      const matchStatus = filtroStatus === 'todos' || caso.status === filtroStatus;
-      const matchGravidade = filtroGravidade === 'todos' || caso.gravidade === filtroGravidade;
-      const matchBusca = caso.agente.toLowerCase().includes(busca.toLowerCase()) ||
-                        caso.id.toLowerCase().includes(busca.toLowerCase()) ||
-                        (caso.bairro && caso.bairro.toLowerCase().includes(busca.toLowerCase()));
-      const matchDate = !dateFilter || isSameDay(new Date(caso.timestamp), dateFilter);
-      return matchStatus && matchGravidade && matchBusca && matchDate;
-    });
-  }, [casos, filtroStatus, filtroGravidade, busca, dateFilter]);
+  const gruposF = useMemo(()=>groupByBairro(casosF),[casosF]);
 
-  const stats = useMemo(() => {
-    return {
-      total: casos.length,
-      confirmados: casos.filter((c) => c.status === 'confirmado').length,
-      suspeitos: casos.filter((c) => c.status === 'suspeito').length,
-      pendentes: casos.filter((c) => c.status === 'pendente-analise').length,
-      descartados: casos.filter((c) => c.status === 'descartado').length,
-      criticos: casos.filter((c) => c.gravidade === 'critico').length,
-      severos: casos.filter((c) => c.gravidade === 'severa').length,
-      moderados: casos.filter((c) => c.gravidade === 'moderada').length,
-      leves: casos.filter((c) => c.gravidade === 'leve').length,
-      bairros: Object.keys(gruposBairro).length
-    };
-  }, [casos, gruposBairro]);
+  const stats = useMemo(()=>({
+    total:casos.length, filtrados:casosF.length,
+    confirmados:casos.filter(c=>c.status==='confirmado').length,
+    suspeitos:casos.filter(c=>c.status==='suspeito').length,
+    pendentes:casos.filter(c=>c.status==='pendente-analise').length,
+    descartados:casos.filter(c=>c.status==='descartado').length,
+    criticos:casos.filter(c=>c.gravidade==='critico').length,
+    severos:casos.filter(c=>c.gravidade==='severa').length,
+    moderados:casos.filter(c=>c.gravidade==='moderada').length,
+    leves:casos.filter(c=>c.gravidade==='leve').length,
+    bairros:Object.keys(grupos).length,
+  }),[casos,casosF,grupos]);
 
-  useEffect(() => {
-    if (casos.length > 0) {
-      const analise = gerarInsightsIA(stats, gruposBairro, casos);
-      setIaAnalise(analise);
-    } else {
-      setIaAnalise('Nenhum caso registrado no sistema. Mantenha a vigilância ativa.');
-    }
-  }, [stats, gruposBairro, casos]);
+  const ia = useMemo(()=>casos.length>0?gerarIA(stats,grupos,casos):'Sem dados. Aguardando registros…',[stats,grupos,casos]);
 
-  const carregarMaisDados = () => {
+  const goToCase = useCallback(caso=>{
+    setSel(caso); setCenter(caso.coordenadas); setInfoId(caso.id); setDetail(true);
+    if(!isDesk) setSidebar(false);
+  },[isDesk]);
+
+  const goToGroup = useCallback((b,g)=>{
+    setCenter(g.coordenadas); setInfoId(`g-${b}`);
+    setSel({id:`g-${b}`,bairro:b,agente:`${g.casos.length} casos`,status:'agrupado',gravidade:'—',
+      coordenadas:g.coordenadas,dataHora:'—',dispositivo:'—',
+      notas:`Conf: ${g.confirmados} | Susp: ${g.suspeitos} | Pend: ${g.pendentes}`,_g:g});
+    setDetail(true);
+    if(!isDesk) setSidebar(false);
+  },[isDesk]);
+
+  const reload = ()=>{ setLoading(true); setTimeout(()=>{ setLoading(false); addN('Dados actualizados','success'); },1500); };
+
+  const exportCSV = useCallback(()=>{
+    try{
+      const h=['ID','Agente','Bairro','Status','Gravidade','Data/Hora','Dispositivo','Lat','Lng','Notas'];
+      const rows=casosF.map(c=>[c.id,c.agente,c.bairro,c.status,c.gravidade,c.dataHora,c.dispositivo,c.coordenadas.lat,c.coordenadas.lng,c.notas].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(','));
+      const blob=new Blob([[h.join(','),...rows].join('\n')],{type:'text/csv;charset=utf-8;'});
+      const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`vigicolera_${format(new Date(),'yyyyMMdd_HHmm')}.csv`});
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+      addN(`CSV exportado — ${casosF.length} casos`,'success');
+    }catch(e){addN('Erro CSV: '+e.message,'error');}
+  },[casosF,addN]);
+
+  const exportPDF = useCallback(async()=>{
     setLoading(true);
-    setTimeout(() => {
-      addNotification('Dados atualizados em tempo real', 'info');
-      setLoading(false);
-    }, 1500);
-  };
+    try{
+      const blob=await pdf(<RelatorioPDF casos={casosF} stats={stats} filtros={F} ia={ia}/>).toBlob();
+      const url=URL.createObjectURL(blob);
+      const a=Object.assign(document.createElement('a'),{href:url,download:`vigicolera_${format(new Date(),'yyyyMMdd_HHmm')}.pdf`});
+      document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+      addN('PDF gerado!','success');
+    }catch(e){addN('Erro PDF: '+e.message,'error');}
+    finally{setLoading(false);}
+  },[casosF,stats,F,ia,addN]);
 
-  const handleZoomIn = () => setMapZoom((prev) => prev + 1);
-  const handleZoomOut = () => setMapZoom((prev) => Math.max(prev - 1, 1));
+  const share = useCallback(async()=>{
+    const text=`VigiCólera Uige\n${stats.total} casos | ${stats.confirmados} confirmados | ${stats.bairros} bairros\n${new Date().toLocaleDateString('pt-AO')}`;
+    if(navigator.share){ await navigator.share({title:'VigiCólera Uige',text}).catch(()=>{}); }
+    else { await navigator.clipboard.writeText(text).catch(()=>{}); addN('Resumo copiado!','info'); }
+  },[stats,addN]);
 
-  const handleMarkerClick = useCallback((caso) => {
-    setSelectedCase(caso);
-    setMapCenter(caso.coordenadas);
-    setSelectedInfoWindow(caso.id);
-    setDrawerOpen(true);
-  }, []);
+  // ─── Painel Único de Filtros + Lista ────────────────────────────────────────
+  const SidePanel = () => (
+    <Box sx={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
 
-  const handleGroupClick = useCallback((bairro, grupo) => {
-    setSelectedCase({
-      ...grupo.casos[0],
-      id: `grupo-${bairro}`,
-      agente: `Vários agentes (${grupo.casos.length})`,
-      status: 'agrupado',
-      gravidade: grupo.confirmados > 0 ? 'critico' : grupo.suspeitos > 0 ? 'moderada' : 'leve',
-      bairro,
-      notas: `Total de casos: ${grupo.casos.length} (Confirmados: ${grupo.confirmados}, Suspeitos: ${grupo.suspeitos})`,
-      descricao: grupo.descricao,
-      coordenadas: grupo.coordenadas
-    });
-    setMapCenter(grupo.coordenadas);
-    setSelectedInfoWindow(`grupo-${bairro}`);
-    setDrawerOpen(true);
-  }, []);
+      {/* Cabeçalho */}
+      <Box sx={{px:2,py:1.5,display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid rgba(255,255,255,0.08)',flexShrink:0}}>
+        <Typography variant="subtitle2" fontWeight={700} sx={{fontSize:'0.85rem',display:'flex',alignItems:'center',gap:.8}}>
+          <FilterIcon sx={{fontSize:16,color:'primary.main'}}/>
+          Filtros &amp; Lista
+          {nActiveF>0&&<Chip label={nActiveF} color="primary" size="small" sx={{height:18,fontSize:'0.62rem',ml:.5}}/>}
+        </Typography>
+        <Box sx={{display:'flex',gap:.5}}>
+          {nActiveF>0&&(
+            <Tooltip title="Limpar filtros"><IconButton size="small" onClick={clearF} color="warning"><ClearAllIcon sx={{fontSize:16}}/></IconButton></Tooltip>
+          )}
+          {!isDesk&&<IconButton size="small" onClick={()=>setSidebar(false)}><CloseIcon sx={{fontSize:16}}/></IconButton>}
+        </Box>
+      </Box>
 
-  const handleInfoWindowClose = useCallback(() => {
-    setSelectedInfoWindow(null);
-  }, []);
+      {/* Filtros */}
+      <Box sx={{px:2,pt:1.5,pb:1,borderBottom:'1px solid rgba(255,255,255,0.06)',flexShrink:0}}>
 
-  const exportToCSV = () => {
-    try {
-      const headers = ['ID', 'Agente', 'Bairro', 'Status', 'Gravidade', 'Data/Hora', 'Dispositivo', 'Latitude', 'Longitude', 'Notas'];
-      
-      const rows = casosFiltrados.map(caso => [
-        `"${caso.id.replace(/"/g, '""')}"`,
-        `"${caso.agente.replace(/"/g, '""')}"`,
-        `"${(caso.bairro || 'Desconhecido').replace(/"/g, '""')}"`,
-        `"${caso.status.replace(/"/g, '""')}"`,
-        `"${caso.gravidade.replace(/"/g, '""')}"`,
-        `"${caso.dataHora.replace(/"/g, '""')}"`,
-        `"${caso.dispositivo.replace(/"/g, '""')}"`,
-        caso.coordenadas.lat,
-        caso.coordenadas.lng,
-        `"${(caso.notas || '').replace(/"/g, '""')}"`
-      ].join(','));
-
-      const csvContent = [headers.join(','), ...rows].join('\n');
-      
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `casos_colera_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      addNotification('Exportação para CSV concluída com sucesso', 'success');
-    } catch (error) {
-      console.error('Erro ao exportar CSV:', error);
-      addNotification('Erro ao exportar para CSV', 'error');
-    }
-  };
-
-  const exportToPDF = async () => {
-    try {
-      setLoading(true);
-      const blob = await pdf(
-        <RelatorioPDF 
-          casosFiltrados={casosFiltrados} 
-          stats={stats} 
-          dateFilter={dateFilter}
-          iaAnalise={iaAnalise}
+        {/* Busca */}
+        <TextField fullWidth size="small" placeholder="Buscar ID, agente, bairro, notas…"
+          value={F.busca} onChange={e=>setF('busca',e.target.value)}
+          InputProps={{
+            startAdornment:<InputAdornment position="start"><SearchIcon sx={{fontSize:17,color:'text.secondary'}}/></InputAdornment>,
+            endAdornment:F.busca?<InputAdornment position="end"><IconButton size="small" onClick={()=>setF('busca','')}><CloseIcon sx={{fontSize:13}}/></IconButton></InputAdornment>:null,
+            sx:{borderRadius:2,fontSize:'0.83rem'},
+          }}
+          sx={{mb:1.5}}
         />
-      ).toBlob();
 
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `relatorio_colera_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+        <Grid container spacing={1}>
+          {/* Status */}
+          <Grid item xs={6}>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{fontSize:'0.78rem'}}>Status</InputLabel>
+              <Select value={F.status} label="Status" onChange={e=>setF('status',e.target.value)} sx={{borderRadius:2,fontSize:'0.78rem'}}>
+                <MenuItem value="todos">Todos</MenuItem>
+                <MenuItem value="confirmado">✗ Confirmado</MenuItem>
+                <MenuItem value="suspeito">? Suspeito</MenuItem>
+                <MenuItem value="pendente-analise">· Pendente</MenuItem>
+                <MenuItem value="descartado">✓ Descartado</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
 
-      addNotification('Relatório PDF (com insights IA) gerado e baixado com sucesso!', 'success');
-    } catch (error) {
-      console.error('Erro ao gerar PDF:', error);
-      addNotification('Erro ao gerar o relatório PDF', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+          {/* Gravidade */}
+          <Grid item xs={6}>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{fontSize:'0.78rem'}}>Gravidade</InputLabel>
+              <Select value={F.gravidade} label="Gravidade" onChange={e=>setF('gravidade',e.target.value)} sx={{borderRadius:2,fontSize:'0.78rem'}}>
+                <MenuItem value="todos">Todas</MenuItem>
+                <MenuItem value="critico">🔴 Crítico</MenuItem>
+                <MenuItem value="severa">🟠 Severa</MenuItem>
+                <MenuItem value="moderada">🟡 Moderada</MenuItem>
+                <MenuItem value="leve">🟢 Leve</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
 
-  const additionalControls = useMemo(() => (
-  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-    <Tooltip title="Recarregar dados">
-      <span> {/* ADICIONE ESTE WRAPPER */}
-        <IconButton color="inherit" onClick={carregarMaisDados} disabled={loading} size="small">
-          {loading ? <CircularProgress size={20} color="inherit" /> : <RefreshIcon fontSize="small" />}
-        </IconButton>
-      </span>
-    </Tooltip>
-    
-    <Tooltip title="Filtrar por data">
-      <IconButton color="inherit" onClick={() => setShowDateFilter(true)} size="small">
-        <DateRangeIcon fontSize="small" />
-      </IconButton>
-    </Tooltip>
-    
-    <ToggleButtonGroup
-      value={viewMode}
-      exclusive
-      onChange={(e, newMode) => newMode && setViewMode(newMode)}
-      size="small"
-      sx={{ bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 2 }}
-    >
-      <ToggleButton value="casos" sx={{ px: 1, py: 0.5 }}>
-        <PeopleIcon fontSize="small" sx={{ mr: 0.5 }} />
-        <Typography variant="caption">Casos</Typography>
-      </ToggleButton>
-      <ToggleButton value="agrupado" sx={{ px: 1, py: 0.5 }}>
-        <LocationCityIcon fontSize="small" sx={{ mr: 0.5 }} />
-        <Typography variant="caption">Bairros</Typography>
-      </ToggleButton>
-    </ToggleButtonGroup>
-    
-    <Tooltip title={showHeatmap ? "Desativar mapa de calor" : "Ativar mapa de calor"}>
-      <IconButton 
-        color={showHeatmap ? 'secondary' : 'inherit'} 
-        onClick={() => setShowHeatmap(!showHeatmap)}
-        size="small"
-      >
-        <LayersIcon fontSize="small" />
-      </IconButton>
-    </Tooltip>
+          {/* Bairro */}
+          <Grid item xs={12}>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{fontSize:'0.78rem'}}>Bairro</InputLabel>
+              <Select value={F.bairro} label="Bairro" onChange={e=>setF('bairro',e.target.value)} sx={{borderRadius:2,fontSize:'0.78rem'}}>
+                {bairroOpts.map(b=>(
+                  <MenuItem key={b} value={b} sx={{fontSize:'0.8rem',display:'flex',justifyContent:'space-between'}}>
+                    {b==='todos'?'Todos os bairros':b}
+                    {b!=='todos'&&grupos[b]&&(
+                      <Chip label={grupos[b].casos.length} size="small" sx={{ml:1,height:15,fontSize:'0.58rem',bgcolor:'rgba(255,255,255,0.1)'}}/>
+                    )}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
 
-    <Tooltip title="Insights e Análise Inteligente (IA)">
-      <IconButton 
-        color={showIAAnalysis ? 'secondary' : 'inherit'} 
-        onClick={() => setShowIAAnalysis(!showIAAnalysis)}
-        size="small"
-      >
-        <SmartToyIcon fontSize="small" />
-      </IconButton>
-    </Tooltip>
+          {/* Datas */}
+          <Grid item xs={6}>
+            <Button fullWidth variant={F.dateFrom?'contained':'outlined'} color="primary" size="small"
+              startIcon={<DateRangeIcon sx={{fontSize:14}}/>} onClick={()=>setDateDlg('from')}
+              sx={{borderRadius:2,fontSize:'0.7rem',justifyContent:'flex-start',textTransform:'none'}}>
+              {F.dateFrom?format(F.dateFrom,'dd/MM/yy'):'De…'}
+            </Button>
+          </Grid>
+          <Grid item xs={6}>
+            <Button fullWidth variant={F.dateTo?'contained':'outlined'} color="primary" size="small"
+              startIcon={<DateRangeIcon sx={{fontSize:14}}/>} onClick={()=>setDateDlg('to')}
+              sx={{borderRadius:2,fontSize:'0.7rem',justifyContent:'flex-start',textTransform:'none'}}>
+              {F.dateTo?format(F.dateTo,'dd/MM/yy'):'Até…'}
+            </Button>
+          </Grid>
+        </Grid>
 
-    <Tooltip title={showLegend ? "Ocultar Legenda" : "Mostrar Legenda"}>
-      <IconButton 
-        color={showLegend ? 'secondary' : 'inherit'} 
-        onClick={() => setShowLegend(!showLegend)}
-        size="small"
-      >
-        {showLegend ? <VisibilityIcon fontSize="small" /> : <VisibilityOffIcon fontSize="small" />}
-      </IconButton>
-    </Tooltip>
+        {/* Chips activos */}
+        {nActiveF>0&&(
+          <Box sx={{display:'flex',flexWrap:'wrap',gap:.5,mt:1}}>
+            {F.status!=='todos'&&<Chip label={F.status} size="small" onDelete={()=>setF('status','todos')} sx={{bgcolor:sc(F.status),color:'white',fontSize:'0.62rem',height:19}}/>}
+            {F.gravidade!=='todos'&&<Chip label={F.gravidade} size="small" onDelete={()=>setF('gravidade','todos')} sx={{bgcolor:gc(F.gravidade),color:'white',fontSize:'0.62rem',height:19}}/>}
+            {F.bairro!=='todos'&&<Chip label={F.bairro} size="small" onDelete={()=>setF('bairro','todos')} color="primary" sx={{fontSize:'0.62rem',height:19}}/>}
+            {F.dateFrom&&<Chip label={`De: ${format(F.dateFrom,'dd/MM')}`} size="small" onDelete={()=>setF('dateFrom',null)} color="secondary" sx={{fontSize:'0.62rem',height:19}}/>}
+            {F.dateTo&&<Chip label={`Até: ${format(F.dateTo,'dd/MM')}`} size="small" onDelete={()=>setF('dateTo',null)} color="secondary" sx={{fontSize:'0.62rem',height:19}}/>}
+            {F.busca&&<Chip label={`"${F.busca}"`} size="small" onDelete={()=>setF('busca','')} sx={{bgcolor:'rgba(255,255,255,0.12)',fontSize:'0.62rem',height:19}}/>}
+          </Box>
+        )}
+      </Box>
 
-    <FormControl size="small" sx={{ minWidth: 100 }}>
-      <Select
-        value={mapType}
-        onChange={(e) => setMapType(e.target.value)}
-        sx={{ 
-          color: 'white', 
-          bgcolor: 'rgba(255,255,255,0.1)',
-          '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-          borderRadius: 2,
-          fontSize: '0.75rem',
-          py: 0.5
-        }}
-      >
-        <MenuItem value="roadmap">Padrão</MenuItem>
-        <MenuItem value="satellite">Satélite</MenuItem>
-        <MenuItem value="terrain">Terreno</MenuItem>
-        <MenuItem value="hybrid">Híbrido</MenuItem>
-      </Select>
-    </FormControl>
+      {/* Contador */}
+      <Box sx={{px:2,py:.8,display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid rgba(255,255,255,0.05)',flexShrink:0}}>
+        <Typography variant="caption" sx={{textTransform:'uppercase',letterSpacing:.8,color:'text.secondary',fontSize:'0.66rem'}}>
+          {viewMode==='agrupado'?'Bairros':'Casos'}
+        </Typography>
+        <Box sx={{display:'flex',alignItems:'center',gap:.5}}>
+          <Chip label={viewMode==='agrupado'?Object.keys(gruposF).length:casosF.length} color="primary" size="small" sx={{height:17,fontSize:'0.62rem'}}/>
+          {casosF.length!==casos.length&&<Typography variant="caption" color="text.disabled" sx={{fontSize:'0.62rem'}}>/ {casos.length}</Typography>}
+        </Box>
+      </Box>
 
-    <Tooltip title="Exportar para CSV">
-      <IconButton color="inherit" onClick={exportToCSV} size="small">
-        <GetAppIcon fontSize="small" />
-      </IconButton>
-    </Tooltip>
+      {/* Lista */}
+      <List dense sx={{flex:1,overflow:'auto',pt:0,pb:1}}>
+        {viewMode==='agrupado'
+          ?Object.keys(gruposF).length===0
+            ?<Box sx={{p:3,textAlign:'center'}}><LocationCityIcon sx={{fontSize:34,color:'text.disabled',mb:1}}/><Typography variant="body2" color="text.disabled">Nenhum bairro</Typography></Box>
+            :Object.entries(gruposF).sort(([,a],[,b])=>b.casos.length-a.casos.length).map(([b,g])=>{
+                const cor=g.confirmados>0?'#ea4335':g.suspeitos>0?'#fbbc05':'#4285f4';
+                return(
+                  <ListItem key={b} disablePadding>
+                    <ListItemButton onClick={()=>goToGroup(b,g)}
+                      sx={{borderLeft:`3px solid ${cor}`,mx:1,my:.25,borderRadius:1.5,'&:hover':{bgcolor:'rgba(26,115,232,0.09)'},transition:'all .15s'}}>
+                      <ListItemAvatar><Avatar sx={{bgcolor:cor,width:32,height:32,fontSize:'0.75rem',fontWeight:700}}>{g.casos.length}</Avatar></ListItemAvatar>
+                      <Box sx={{minWidth:0}}>
+                        <Typography variant="body2" fontWeight={600} noWrap sx={{fontSize:'0.8rem'}}>{b}</Typography>
+                        <Box sx={{display:'flex',gap:.35,mt:.2,flexWrap:'wrap'}}>
+                          {g.confirmados>0&&<Chip label={`${g.confirmados}C`} size="small" sx={{bgcolor:'#fce8e6',color:'#c5221f',height:15,fontSize:'0.56rem'}}/>}
+                          {g.suspeitos>0&&<Chip label={`${g.suspeitos}S`} size="small" sx={{bgcolor:'#fef7e0',color:'#e37400',height:15,fontSize:'0.56rem'}}/>}
+                          {g.pendentes>0&&<Chip label={`${g.pendentes}P`} size="small" sx={{bgcolor:'#e8f0fe',color:'#1a73e8',height:15,fontSize:'0.56rem'}}/>}
+                          {g.descartados>0&&<Chip label={`${g.descartados}D`} size="small" sx={{bgcolor:'#e6f4ea',color:'#188038',height:15,fontSize:'0.56rem'}}/>}
+                        </Box>
+                      </Box>
+                    </ListItemButton>
+                  </ListItem>
+                );
+              })
+          :casosF.length===0
+            ?<Box sx={{p:3,textAlign:'center'}}><SearchIcon sx={{fontSize:34,color:'text.disabled',mb:1}}/><Typography variant="body2" color="text.disabled">Nenhum caso</Typography>{nActiveF>0&&<Button size="small" onClick={clearF} sx={{mt:1,fontSize:'0.72rem'}}>Limpar filtros</Button>}</Box>
+            :casosF.sort((a,b)=>b.timestamp-a.timestamp).map(caso=>(
+                <ListItem key={caso.id} disablePadding>
+                  <ListItemButton selected={sel?.id===caso.id} onClick={()=>goToCase(caso)}
+                    sx={{borderLeft:`3px solid ${sc(caso.status)}`,mx:1,my:.25,borderRadius:1.5,'&:hover':{bgcolor:'rgba(26,115,232,0.09)'},'&.Mui-selected':{bgcolor:'rgba(26,115,232,0.13)'},transition:'all .15s'}}>
+                    <ListItemAvatar><Avatar sx={{bgcolor:sc(caso.status),width:32,height:32,'& svg':{fontSize:15}}}>{SI[caso.status]||<LocationIcon/>}</Avatar></ListItemAvatar>
+                    <Box sx={{minWidth:0,width:'100%'}}>
+                      <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                        <Typography variant="body2" fontWeight={600} noWrap sx={{fontSize:'0.8rem',flex:1,mr:.5}}>{caso.bairro||'Sem bairro'}</Typography>
+                        <Chip label={caso.gravidade} size="small" sx={{bgcolor:gc(caso.gravidade),color:'white',height:15,fontSize:'0.56rem',flexShrink:0}}/>
+                      </Box>
+                      <Typography variant="caption" color="text.secondary" noWrap sx={{fontSize:'0.68rem'}}>{caso.agente}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{display:'block',fontSize:'0.65rem'}}>{fdt(caso.dataHora).date}</Typography>
+                    </Box>
+                  </ListItemButton>
+                </ListItem>
+              ))
+        }
+      </List>
+    </Box>
+  );
 
-    {/* ESTE É O QUE ESTÁ CAUSANDO O ERRO - CORRIGIDO COM SPAN */}
-    <Tooltip title="Exportar para PDF (com insights IA)">
-      <span> {/* ADICIONE ESTE WRAPPER */}
-        <IconButton color="inherit" onClick={exportToPDF} disabled={loading} size="small">
-          <GetAppIcon fontSize="small" />
-        </IconButton>
-      </span>
-    </Tooltip>
-  </Box>
-), [loading, viewMode, showHeatmap, mapType, showIAAnalysis, showLegend, exportToCSV, exportToPDF, carregarMaisDados, setShowDateFilter, setViewMode, setShowHeatmap, setShowIAAnalysis, setShowLegend, setMapType]);
+  // ─── Menu Mais ────────────────────────────────────────────────────────────
+  const MoreMenu = () => (
+    <Menu anchorEl={moreAnchor} open={Boolean(moreAnchor)} onClose={()=>setMore(null)}
+      PaperProps={{sx:{bgcolor:'#1c1c1c',border:'1px solid rgba(255,255,255,0.1)',minWidth:220}}}>
+      <MenuItem onClick={()=>{setVM(v=>v==='casos'?'agrupado':'casos');setMore(null);}}>
+        {viewMode==='casos'?<LocationCityIcon sx={{mr:1.5,fontSize:18}}/>:<PeopleIcon sx={{mr:1.5,fontSize:18}}/>}
+        <Typography variant="body2">{viewMode==='casos'?'Vista por Bairros':'Vista por Casos'}</Typography>
+      </MenuItem>
+      <MenuItem onClick={()=>{setHeatmap(h=>!h);setMore(null);}}>
+        <LayersIcon sx={{mr:1.5,fontSize:18,color:heatmap?'secondary.main':'inherit'}}/>
+        <Typography variant="body2">{heatmap?'Ocultar Heatmap':'Mapa de Calor'}</Typography>
+      </MenuItem>
+      <MenuItem onClick={()=>{setIA(v=>!v);setMore(null);}}>
+        <SmartToyIcon sx={{mr:1.5,fontSize:18,color:showIA?'secondary.main':'inherit'}}/>
+        <Typography variant="body2">{showIA?'Ocultar IA':'Análise IA'}</Typography>
+      </MenuItem>
+      <MenuItem onClick={()=>{setStats(v=>!v);setMore(null);}}>
+        <AnalyticsIcon sx={{mr:1.5,fontSize:18,color:showStats?'secondary.main':'inherit'}}/>
+        <Typography variant="body2">{showStats?'Ocultar Stats':'Estatísticas'}</Typography>
+      </MenuItem>
+      <MenuItem onClick={()=>{setLegend(v=>!v);setMore(null);}}>
+        {legend?<VisibilityOffIcon sx={{mr:1.5,fontSize:18}}/>:<VisibilityIcon sx={{mr:1.5,fontSize:18}}/>}
+        <Typography variant="body2">{legend?'Ocultar Legenda':'Mostrar Legenda'}</Typography>
+      </MenuItem>
+      <Divider sx={{borderColor:'rgba(255,255,255,0.07)'}}/>
+      <MenuItem dense>
+        <FormControl size="small" fullWidth>
+          <Select value={mapType} onChange={e=>{setMapType(e.target.value);setMore(null);}} sx={{'& .MuiOutlinedInput-notchedOutline':{border:'none'},fontSize:'0.82rem'}}>
+            <MenuItem value="roadmap">🗺 Mapa Padrão</MenuItem>
+            <MenuItem value="satellite">🛰 Satélite</MenuItem>
+            <MenuItem value="terrain">⛰ Terreno</MenuItem>
+            <MenuItem value="hybrid">🌐 Híbrido</MenuItem>
+          </Select>
+        </FormControl>
+      </MenuItem>
+      <Divider sx={{borderColor:'rgba(255,255,255,0.07)'}}/>
+      <MenuItem onClick={()=>{exportCSV();setMore(null);}}>
+        <GetAppIcon sx={{mr:1.5,fontSize:18}}/><Typography variant="body2">Exportar CSV</Typography>
+      </MenuItem>
+      <MenuItem onClick={()=>{exportPDF();setMore(null);}} disabled={loading}>
+        <PrintIcon sx={{mr:1.5,fontSize:18}}/><Typography variant="body2">Exportar PDF</Typography>
+      </MenuItem>
+      <MenuItem onClick={()=>{share();setMore(null);}}>
+        <ShareIcon sx={{mr:1.5,fontSize:18}}/><Typography variant="body2">Partilhar Resumo</Typography>
+      </MenuItem>
+    </Menu>
+  );
+
+  const appH = isMobile?56:64;
+
   return (
     <ThemeProvider theme={darkTheme}>
       <LocalizationProvider dateAdapter={AdapterDateFns}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
-          {/* AppBar Fixo */}
-          <AppBar position="fixed" elevation={0} sx={{ 
-            bgcolor: 'rgba(10, 10, 10, 0.95)',
-            backdropFilter: 'blur(20px)',
-            borderBottom: '1px solid rgba(255,255,255,0.1)',
-            zIndex: 1200
-          }}>
-            <Toolbar>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                <MapIcon sx={{ fontSize: 32, color: 'primary.main' }} />
-                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                  <Typography variant="h6" fontWeight="bold" sx={{ mr: 2, lineHeight: 1.2 }}>
-                    VigiCólera Angola
-                  </Typography>
-                  <Typography variant="caption" color="secondary.main" sx={{ fontSize: '0.7rem', lineHeight: 1 }}>
-                    Sistema de Monitoramento Inteligente
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', gap: 2, ml: 2 }}>
-                  <AnimatedBadge badgeContent={stats.confirmados}>
-                    <Chip 
-                      icon={<WarningIcon />} 
-                      label={`${stats.confirmados} Confirmados`} 
-                      color="error" 
-                      variant="outlined"
-                      size="small"
-                    />
-                  </AnimatedBadge>
-                  
-                  <AnimatedBadge badgeContent={stats.pendentes} color="primary">
-                    <Chip 
-                      icon={<ScheduleIcon />} 
-                      label={`${stats.pendentes} Pendentes`} 
-                      color="primary" 
-                      variant="outlined"
-                      size="small"
-                    />
-                  </AnimatedBadge>
+        <Box sx={{display:'flex',flexDirection:'column',height:'100vh',bgcolor:'background.default',overflow:'hidden'}}>
 
-                  <AnimatedBadge badgeContent={stats.total}>
-                    <Chip 
-                      icon={<AnalyticsIcon />} 
-                      label={`${stats.total} Total`} 
-                      color="info" 
-                      variant="outlined"
-                      size="small"
-                      onClick={() => setShowStatistics(!showStatistics)}
-                      clickable
-                    />
-                  </AnimatedBadge>
+          {/* AppBar */}
+          <AppBar position="fixed" elevation={0} sx={{zIndex:1300}}>
+            <Toolbar sx={{minHeight:{xs:56,sm:64},px:{xs:1,sm:2},gap:1}}>
+              <Box sx={{display:'flex',alignItems:'center',gap:1,mr:1,flexShrink:0}}>
+                <MapIcon sx={{color:'#1a73e8',fontSize:{xs:22,sm:26}}}/>
+                <Box>
+                  <Typography fontWeight={800} sx={{fontSize:{xs:'0.85rem',sm:'1rem'},lineHeight:1.1}}>VigiCólera</Typography>
+                  {!isMobile&&<Typography sx={{fontSize:'0.58rem',color:'#00bcd4',lineHeight:1}}>Uige · Monitoramento</Typography>}
                 </Box>
               </Box>
 
-              <Box sx={{ flexGrow: 1 }} />
+              {isDesk&&(
+                <Box sx={{display:'flex',gap:.8}}>
+                  <Chip icon={<WarningIcon sx={{fontSize:'13px !important'}}/>} label={`${stats.confirmados} Conf.`} color="error" variant="outlined" size="small" sx={{fontSize:'0.68rem',height:24}}/>
+                  <Chip icon={<ScheduleIcon sx={{fontSize:'13px !important'}}/>} label={`${stats.pendentes} Pend.`} color="primary" variant="outlined" size="small" sx={{fontSize:'0.68rem',height:24}}/>
+                  <Chip icon={<AnalyticsIcon sx={{fontSize:'13px !important'}}/>} label={`${stats.total} Total`} color="info" variant="outlined" size="small" sx={{fontSize:'0.68rem',height:24,cursor:'pointer'}} onClick={()=>setStats(v=>!v)}/>
+                </Box>
+              )}
+              {isTablet&&(
+                <Box sx={{display:'flex',gap:.4}}>
+                  <Chip label={`${stats.confirmados}C`} color="error" size="small" sx={{fontSize:'0.62rem'}}/>
+                  <Chip label={`${stats.total}T`} color="info" size="small" sx={{fontSize:'0.62rem',cursor:'pointer'}} onClick={()=>setStats(v=>!v)}/>
+                </Box>
+              )}
 
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Tooltip title="Estatísticas Detalhadas">
-                  <IconButton 
-                    color={showStatistics ? 'secondary' : 'inherit'} 
-                    onClick={() => setShowStatistics(!showStatistics)}
-                    sx={{ 
-                      bgcolor: showStatistics ? 'rgba(0, 229, 255, 0.1)' : 'transparent',
-                      '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
-                    }}
-                  >
-                    <AnalyticsIcon />
+              <Box sx={{flexGrow:1}}/>
+
+              {isDesk&&lastUpdate&&(
+                <Typography variant="caption" color="text.disabled" sx={{fontSize:'0.62rem',mr:.5}}>
+                  {format(lastUpdate,'HH:mm:ss')}
+                </Typography>
+              )}
+
+              <Box sx={{display:'flex',gap:.4,alignItems:'center'}}>
+                <Tooltip title="Actualizar"><span>
+                  <IconButton size="small" color="inherit" onClick={reload} disabled={loading}>
+                    {loading?<CircularProgress size={16} color="inherit"/>:<RefreshIcon sx={{fontSize:18}}/>}
+                  </IconButton>
+                </span></Tooltip>
+
+                <Tooltip title="Filtros e Lista">
+                  <IconButton size="small" onClick={()=>setSidebar(v=>!v)}
+                    sx={{bgcolor:sidebar?'rgba(26,115,232,0.2)':'rgba(255,255,255,0.07)',color:sidebar?'primary.main':'inherit',borderRadius:1.5}}>
+                    <Badge badgeContent={nActiveF||undefined} color="warning" variant="dot">
+                      <FilterIcon sx={{fontSize:18}}/>
+                    </Badge>
                   </IconButton>
                 </Tooltip>
 
-                <Tooltip title={showSidebar ? "Ocultar Sidebar" : "Exibir Sidebar"}>
-                  <IconButton 
-                    color="inherit" 
-                    onClick={() => setShowSidebar(!showSidebar)}
-                    sx={{ 
-                      bgcolor: 'rgba(255,255,255,0.1)',
-                      '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' }
-                    }}
-                  >
-                    {showSidebar ? <CloseIcon /> : <FilterIcon />}
-                  </IconButton>
-                </Tooltip>
+                {isDesk&&(
+                  <>
+                    <ToggleButtonGroup value={viewMode} exclusive size="small" onChange={(_,v)=>v&&setVM(v)}
+                      sx={{bgcolor:'rgba(255,255,255,0.07)',borderRadius:2,mx:.5}}>
+                      <ToggleButton value="casos" sx={{px:1,py:.3,fontSize:'0.68rem',gap:.4}}><PeopleIcon sx={{fontSize:14}}/>Casos</ToggleButton>
+                      <ToggleButton value="agrupado" sx={{px:1,py:.3,fontSize:'0.68rem',gap:.4}}><LocationCityIcon sx={{fontSize:14}}/>Bairros</ToggleButton>
+                    </ToggleButtonGroup>
+                    <Tooltip title={heatmap?'Ocultar Heatmap':'Mapa de Calor'}>
+                      <IconButton size="small" color={heatmap?'secondary':'inherit'} onClick={()=>setHeatmap(v=>!v)}><LayersIcon sx={{fontSize:18}}/></IconButton>
+                    </Tooltip>
+                    <Tooltip title={showIA?'Ocultar IA':'Análise IA'}>
+                      <IconButton size="small" color={showIA?'secondary':'inherit'} onClick={()=>setIA(v=>!v)}><SmartToyIcon sx={{fontSize:18}}/></IconButton>
+                    </Tooltip>
+                    <Tooltip title={showStats?'Ocultar Stats':'Estatísticas'}>
+                      <IconButton size="small" color={showStats?'secondary':'inherit'} onClick={()=>setStats(v=>!v)}><AnalyticsIcon sx={{fontSize:18}}/></IconButton>
+                    </Tooltip>
+                    <FormControl size="small" sx={{minWidth:92}}>
+                      <Select value={mapType} onChange={e=>setMapType(e.target.value)}
+                        sx={{color:'white',bgcolor:'rgba(255,255,255,0.07)','& .MuiOutlinedInput-notchedOutline':{border:'none'},borderRadius:2,fontSize:'0.68rem'}}>
+                        <MenuItem value="roadmap">Padrão</MenuItem>
+                        <MenuItem value="satellite">Satélite</MenuItem>
+                        <MenuItem value="terrain">Terreno</MenuItem>
+                        <MenuItem value="hybrid">Híbrido</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <Tooltip title="Exportar CSV"><IconButton size="small" color="inherit" onClick={exportCSV}><GetAppIcon sx={{fontSize:18}}/></IconButton></Tooltip>
+                    <Tooltip title="Exportar PDF"><span><IconButton size="small" color="inherit" onClick={exportPDF} disabled={loading}><PrintIcon sx={{fontSize:18}}/></IconButton></span></Tooltip>
+                    <Tooltip title="Partilhar"><IconButton size="small" color="inherit" onClick={share}><ShareIcon sx={{fontSize:18}}/></IconButton></Tooltip>
+                  </>
+                )}
 
-                {additionalControls}
+                <IconButton size="small" color="inherit" onClick={e=>setMore(e.currentTarget)}>
+                  <MoreVertIcon sx={{fontSize:20}}/>
+                </IconButton>
+                <MoreMenu/>
               </Box>
             </Toolbar>
           </AppBar>
+          <Box sx={{height:appH}}/>
 
-
-
-
-          
-
-          {/* Espaço para a AppBar fixa */}
-          <Toolbar />
-
-          {/* Painel de Estatísticas */}
-          <Collapse in={showStatistics}>
-            <Paper elevation={0} sx={{ 
-              p: 3, 
-              bgcolor: 'rgba(26, 26, 40, 0.95)',
-              borderBottom: '1px solid rgba(255,255,255,0.1)',
-              backdropFilter: 'blur(10px)'
-            }}>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-                <TrendingUpIcon color="primary" />
-                Estatísticas Detalhadas em Tempo Real
+          {/* Estatísticas */}
+          <Collapse in={showStats}>
+            <Paper elevation={0} sx={{px:{xs:2,sm:3},py:2,bgcolor:'rgba(12,12,18,0.98)',borderBottom:'1px solid rgba(255,255,255,0.07)'}}>
+              <Typography variant="caption" sx={{textTransform:'uppercase',letterSpacing:1,color:'text.secondary',fontSize:'0.67rem',display:'flex',alignItems:'center',gap:.7,mb:1.5}}>
+                <TrendingUpIcon sx={{fontSize:14}}/> Estatísticas
               </Typography>
-              
-              <Grid container spacing={3}>
-                <Grid item xs={12} md={3}>
-                  <StatCard
-                    title="Casos Confirmados"
-                    value={stats.confirmados}
-                    color="#ff5252"
-                    icon={<WarningIcon />}
-                    subtitle={`${stats.total > 0 ? ((stats.confirmados / stats.total) * 100).toFixed(1) : 0}% do total`}
-                  />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <StatCard
-                    title="Casos Suspeitos"
-                    value={stats.suspeitos}
-                    color="#ffab40"
-                    icon={<ScheduleIcon />}
-                    subtitle={`${stats.total > 0 ? ((stats.suspeitos / stats.total) * 100).toFixed(1) : 0}% do total`}
-                  />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <StatCard
-                    title="Casos Pendentes"
-                    value={stats.pendentes}
-                    color="#40c4ff"
-                    icon={<TimelineIcon />}
-                    subtitle={`${stats.total > 0 ? ((stats.pendentes / stats.total) * 100).toFixed(1) : 0}% do total`}
-                  />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <StatCard
-                    title="Casos Descartados"
-                    value={stats.descartados}
-                    color="#69f0ae"
-                    icon={<CheckCircleIcon />}
-                    subtitle={`${stats.total > 0 ? ((stats.descartados / stats.total) * 100).toFixed(1) : 0}% do total`}
-                  />
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Typography variant="subtitle1" gutterBottom sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <LocationCityIcon color="info" />
-                    Distribuição por Gravidade e Bairros
-                  </Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={8}>
-                      <Grid container spacing={2}>
-                        <Grid item xs={3}>
-                          <StatCard
-                            title="Críticos"
-                            value={stats.criticos}
-                            color="#d32f2f"
-                            icon={<WarningIcon />}
-                            subtitle="Casos graves"
-                          />
-                        </Grid>
-                        <Grid item xs={3}>
-                          <StatCard
-                            title="Severos"
-                            value={stats.severos}
-                            color="#f57c00"
-                            icon={<WarningIcon />}
-                            subtitle="Casos severos"
-                          />
-                        </Grid>
-                        <Grid item xs={3}>
-                          <StatCard
-                            title="Moderados"
-                            value={stats.moderados}
-                            color="#ffb300"
-                            icon={<WarningIcon />}
-                            subtitle="Casos moderados"
-                          />
-                        </Grid>
-                        <Grid item xs={3}>
-                          <StatCard
-                            title="Leves"
-                            value={stats.leves}
-                            color="#7cb342"
-                            icon={<WarningIcon />}
-                            subtitle="Casos leves"
-                          />
-                        </Grid>
-                      </Grid>
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <StatCard
-                        title="Bairros Afetados"
-                        value={stats.bairros}
-                        color="#2196f3"
-                        icon={<LocationCityIcon />}
-                        subtitle={`${stats.total > 0 ? (stats.total / stats.bairros).toFixed(1) : 0} casos/bairro`}
-                      />
-                    </Grid>
+              <Grid container spacing={{xs:1,sm:1.5}}>
+                {[{t:'Confirmados',v:stats.confirmados,c:'#ea4335',i:<WarningIcon/>},{t:'Suspeitos',v:stats.suspeitos,c:'#fbbc05',i:<ScheduleIcon/>},{t:'Pendentes',v:stats.pendentes,c:'#4285f4',i:<TimelineIcon/>},{t:'Descartados',v:stats.descartados,c:'#34a853',i:<CheckCircleIcon/>}].map(({t,v,c,i})=>(
+                  <Grid item xs={6} md={3} key={t}>
+                    <Card elevation={0} sx={{p:{xs:1.5,sm:2},'&:hover':{transform:'translateY(-2px)',boxShadow:4},transition:'all .2s'}}>
+                      <Box sx={{display:'flex',alignItems:'center',gap:1.5,mb:.8}}><Avatar sx={{bgcolor:c,width:{xs:28,sm:34},height:{xs:28,sm:34}}}>{i}</Avatar><Typography variant="caption" color="text.secondary" sx={{fontSize:'0.7rem'}}>{t}</Typography></Box>
+                      <Typography fontWeight={800} color={c} sx={{fontSize:{xs:'1.3rem',sm:'1.7rem'}}}>{v}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{fontSize:'0.62rem'}}>{stats.total>0?((v/stats.total)*100).toFixed(1):0}%</Typography>
+                    </Card>
                   </Grid>
+                ))}
+                {[{t:'Críticos',v:stats.criticos,c:'#b71c1c'},{t:'Severos',v:stats.severos,c:'#e65100'},{t:'Moderados',v:stats.moderados,c:'#f9a825'},{t:'Leves',v:stats.leves,c:'#2e7d32'}].map(({t,v,c})=>(
+                  <Grid item xs={6} sm={3} key={t}>
+                    <Card elevation={0} sx={{p:{xs:1.2,sm:1.8}}}><Typography variant="caption" color="text.secondary" sx={{fontSize:'0.68rem'}}>{t}</Typography><Typography fontWeight={700} color={c} sx={{fontSize:{xs:'1.1rem',sm:'1.4rem'}}}>{v}</Typography></Card>
+                  </Grid>
+                ))}
+                <Grid item xs={12} sm={6} md={4}>
+                  <Card elevation={0} sx={{p:{xs:1.5,sm:2}}}>
+                    <Box sx={{display:'flex',alignItems:'center',gap:1.5,mb:.8}}><Avatar sx={{bgcolor:'#1a73e8',width:{xs:28,sm:34},height:{xs:28,sm:34}}}><LocationCityIcon/></Avatar><Typography variant="caption" color="text.secondary" sx={{fontSize:'0.7rem'}}>Bairros Afetados</Typography></Box>
+                    <Typography fontWeight={800} color="#1a73e8" sx={{fontSize:{xs:'1.3rem',sm:'1.7rem'}}}>{stats.bairros}</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{fontSize:'0.62rem'}}>~{stats.total>0?(stats.total/Math.max(stats.bairros,1)).toFixed(1):0} casos/bairro</Typography>
+                  </Card>
                 </Grid>
               </Grid>
             </Paper>
           </Collapse>
 
-          {/* Painel de Insights e Análise IA */}
-          <Collapse in={showIAAnalysis}>
-            <Accordion 
-              defaultExpanded={false}
-              elevation={0}
-              sx={{ 
-                bgcolor: 'rgba(20, 20, 40, 0.95)',
-                borderBottom: '1px solid rgba(255,255,255,0.1)',
-                backdropFilter: 'blur(10px)',
-                '&:before': { display: 'none' }
-              }}
-            >
-              <AccordionSummary 
-                expandIcon={<ExpandMoreIcon sx={{ color: 'secondary.main' }} />}
-                sx={{ 
-                  bgcolor: 'rgba(30, 30, 60, 0.8)',
-                  borderBottom: '1px solid rgba(255,255,255,0.1)'
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <SmartToyIcon color="secondary" />
-                  <Box>
-                    <Typography variant="subtitle1" fontWeight="bold">
-                      Insights e Análise Inteligente em Tempo Real
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Análise preditiva e recomendações baseadas em IA
-                    </Typography>
-                  </Box>
+          {/* IA */}
+          <Collapse in={showIA}>
+            <Accordion defaultExpanded elevation={0} sx={{bgcolor:'rgba(8,8,18,0.98)',borderBottom:'1px solid rgba(0,188,212,0.12)','&:before':{display:'none'}}}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon sx={{color:'secondary.main'}}/>} sx={{bgcolor:'rgba(0,188,212,0.04)',minHeight:46}}>
+                <Box sx={{display:'flex',alignItems:'center',gap:1.5}}>
+                  <SmartToyIcon color="secondary" sx={{fontSize:18}}/>
+                  <Typography variant="subtitle2" fontWeight={700} sx={{fontSize:'0.85rem'}}>Análise Inteligente — IA</Typography>
+                  <Chip label="Ao vivo" color="secondary" size="small" variant="outlined" sx={{fontSize:'0.58rem',height:17,animation:'pulse 2s infinite','@keyframes pulse':{'0%,100%':{opacity:1},'50%':{opacity:.5}}}}/>
                 </Box>
               </AccordionSummary>
-              <AccordionDetails sx={{ p: 0 }}>
-                <Paper elevation={0} sx={{ p: 3, bgcolor: 'transparent' }}>
-                  <Card elevation={2} sx={{ 
-                    bgcolor: 'rgba(10, 10, 30, 0.8)',
-                    border: '1px solid rgba(0, 229, 255, 0.2)'
-                  }}>
-                    <CardContent>
-                      <Typography 
-                        variant="body1" 
-                        component="pre" 
-                        sx={{ 
-                          whiteSpace: 'pre-wrap', 
-                          fontFamily: 'inherit',
-                          color: 'rgba(255, 255, 255, 0.9)',
-                          fontSize: '0.9rem',
-                          lineHeight: 1.6
-                        }}
-                      >
-                        {iaAnalise || 'Carregando insights...'}
-                      </Typography>
-                      <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-                        <Button 
-                          size="small" 
-                          variant="outlined" 
-                          color="secondary"
-                          onClick={exportToPDF}
-                          startIcon={<GetAppIcon />}
-                        >
-                          Exportar Análise
-                        </Button>
-                        <Button 
-                          size="small" 
-                          variant="contained" 
-                          color="secondary"
-                          onClick={() => addNotification('Análise IA atualizada', 'info')}
-                          startIcon={<RefreshIcon />}
-                        >
-                          Atualizar Análise
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Paper>
+              <AccordionDetails sx={{p:0}}>
+                <Box sx={{p:{xs:1.5,sm:2.5}}}>
+                  <Typography component="pre" sx={{whiteSpace:'pre-wrap',fontFamily:'monospace',fontSize:{xs:'0.7rem',sm:'0.78rem'},lineHeight:1.8,color:'rgba(255,255,255,0.87)'}}>
+                    {ia}
+                  </Typography>
+                  <Box sx={{mt:2,display:'flex',gap:1,flexWrap:'wrap'}}>
+                    <Button size="small" variant="outlined" color="secondary" startIcon={<PrintIcon/>} onClick={exportPDF} disabled={loading}>Exportar PDF</Button>
+                    <Button size="small" variant="outlined" color="secondary" startIcon={<ShareIcon/>} onClick={share}>Partilhar</Button>
+                    <Button size="small" variant="contained" color="secondary" startIcon={<RefreshIcon/>} onClick={()=>addN('IA actualizada','info')}>Actualizar IA</Button>
+                  </Box>
+                </Box>
               </AccordionDetails>
             </Accordion>
           </Collapse>
 
-          <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-            {showSidebar && (
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  width: 400, 
-                  borderRight: '1px solid rgba(255,255,255,0.1)', 
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  bgcolor: 'background.paper',
-                  backdropFilter: 'blur(10px)'
-                }}
-              >
-                <Box sx={{ p: 3, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-                    <FilterIcon color="primary" />
-                    Filtros e Busca Avançada
-                  </Typography>
-                  
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <TextField
-                      fullWidth
-                      variant="outlined"
-                      placeholder="Buscar por ID, Agente ou Bairro..."
-                      value={busca}
-                      onChange={(e) => setBusca(e.target.value)}
-                      InputProps={{
-                        startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-                        sx: { borderRadius: 2 }
-                      }}
-                      size="small"
-                    />
+          {/* Corpo */}
+          <Box sx={{display:'flex',flex:1,overflow:'hidden',position:'relative'}}>
 
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Status do Caso</InputLabel>
-                      <Select
-                        value={filtroStatus}
-                        label="Status do Caso"
-                        onChange={(e) => setFiltroStatus(e.target.value)}
-                        sx={{ borderRadius: 2 }}
-                      >
-                        <MenuItem value="todos">Todos os Status</MenuItem>
-                        <MenuItem value="confirmado">Confirmado</MenuItem>
-                        <MenuItem value="suspeito">Suspeito</MenuItem>
-                        <MenuItem value="pendente-analise">Pendente</MenuItem>
-                        <MenuItem value="descartado">Descartado</MenuItem>
-                      </Select>
-                    </FormControl>
-
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Nível de Gravidade</InputLabel>
-                      <Select
-                        value={filtroGravidade}
-                        label="Nível de Gravidade"
-                        onChange={(e) => setFiltroGravidade(e.target.value)}
-                        sx={{ borderRadius: 2 }}
-                      >
-                        <MenuItem value="todos">Todas as Gravidades</MenuItem>
-                        <MenuItem value="critico">Crítico</MenuItem>
-                        <MenuItem value="severa">Severa</MenuItem>
-                        <MenuItem value="moderada">Moderada</MenuItem>
-                        <MenuItem value="leve">Leve</MenuItem>
-                      </Select>
-                    </FormControl>
-
-                    <Button 
-                      variant="outlined" 
-                      color="secondary" 
-                      startIcon={<DateRangeIcon />}
-                      onClick={() => setShowDateFilter(true)}
-                      sx={{ borderRadius: 2 }}
-                    >
-                      {dateFilter ? format(dateFilter, 'dd/MM/yyyy') : 'Filtrar por data'}
-                    </Button>
-                  </Box>
-                </Box>
-
-                <Box sx={{ flex: 1, overflow: 'auto' }}>
-                  <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                    <Typography variant="subtitle1" fontWeight="bold">
-                      {viewMode === 'agrupado' ? 'Bairros' : 'Casos'} Encontrados
-                    </Typography>
-                    <Chip 
-                      label={`${viewMode === 'agrupado' ? Object.keys(gruposBairro).length : casosFiltrados.length} itens`} 
-                      color="info" 
-                      size="small"
-                    />
-                  </Box>
-                  
-                  <List sx={{ pt: 0 }}>
-                    {viewMode === 'agrupado' ? (
-                      Object.entries(gruposBairro).map(([bairro, grupo]) => (
-                        <ListItem key={`list-group-${bairro}`} disablePadding>
-                          <ListItemButton
-                            onClick={() => handleGroupClick(bairro, grupo)}
-                            sx={{
-                              borderLeft: `4px solid ${grupo.confirmados > 0 ? '#ff5252' : grupo.suspeitos > 0 ? '#ffab40' : '#40c4ff'}`,
-                              mb: 1,
-                              mx: 1,
-                              borderRadius: 2,
-                              transition: 'all 0.2s',
-                              '&:hover': {
-                                bgcolor: 'rgba(255,255,255,0.05)',
-                                transform: 'translateX(4px)'
-                              }
-                            }}
-                          >
-                            <ListItemAvatar>
-                              <Avatar sx={{ 
-                                bgcolor: grupo.confirmados > 0 ? '#ff5252' : grupo.suspeitos > 0 ? '#ffab40' : '#40c4ff',
-                                fontWeight: 'bold'
-                              }}>
-                                {grupo.casos.length}
-                              </Avatar>
-                            </ListItemAvatar>
-                            <Box component="div" sx={{ width: '100%' }}>
-                              <Typography variant="subtitle2" fontWeight="bold">
-                                {bairro}
-                              </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                                <Typography variant="caption" color="text.secondary">
-                                  Total: {grupo.casos.length} casos
-                                </Typography>
-                                <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto' }}>
-                                  {grupo.confirmados > 0 && (
-                                    <Chip 
-                                      label={`${grupo.confirmados}`} 
-                                      size="small" 
-                                      sx={{ 
-                                        bgcolor: '#ff5252',
-                                        color: 'white',
-                                        fontSize: '0.65rem',
-                                        height: 20
-                                      }}
-                                    />
-                                  )}
-                                  {grupo.suspeitos > 0 && (
-                                    <Chip 
-                                      label={`${grupo.suspeitos}`} 
-                                      size="small" 
-                                      sx={{ 
-                                        bgcolor: '#ffab40',
-                                        color: 'white',
-                                        fontSize: '0.65rem',
-                                        height: 20
-                                      }}
-                                    />
-                                  )}
-                                </Box>
-                              </Box>
-                            </Box>
-                          </ListItemButton>
-                        </ListItem>
-                      ))
-                    ) : (
-                      casosFiltrados.map((caso) => (
-                        <ListItem key={`list-caso-${caso.id}`} disablePadding>
-                          <ListItemButton
-                            onClick={() => handleMarkerClick(caso)}
-                            selected={selectedCase?.id === caso.id}
-                            sx={{
-                              borderLeft: `4px solid ${getStatusColor(caso.status)}`,
-                              mb: 1,
-                              mx: 1,
-                              borderRadius: 2,
-                              transition: 'all 0.2s',
-                              '&:hover': {
-                                bgcolor: 'rgba(255,255,255,0.05)',
-                                transform: 'translateX(4px)'
-                              },
-                              '&.Mui-selected': {
-                                bgcolor: 'primary.dark',
-                                '&:hover': {
-                                  bgcolor: 'primary.dark',
-                                },
-                              },
-                            }}
-                          >
-                            <ListItemAvatar>
-                              <Avatar sx={{ 
-                                bgcolor: getStatusColor(caso.status),
-                                '& .MuiSvgIcon-root': { fontSize: 20 }
-                              }}>
-                                {getStatusIcon(caso.status)}
-                              </Avatar>
-                            </ListItemAvatar>
-                            <Box component="div" sx={{ width: '100%' }}>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <Typography variant="subtitle2" fontWeight="bold">
-                                  {caso.bairro || 'Sem bairro'}
-                                </Typography>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>
-                                  <Chip 
-                                    label={caso.status} 
-                                    size="small" 
-                                    sx={{ 
-                                      bgcolor: getStatusColor(caso.status),
-                                      color: 'white',
-                                      fontWeight: 'bold',
-                                      fontSize: '0.7rem',
-                                      height: 20
-                                    }}
-                                  />
-                                  <Chip 
-                                    label={caso.gravidade} 
-                                    size="small" 
-                                    sx={{ 
-                                      bgcolor: getGravidadeColor(caso.gravidade),
-                                      color: 'white',
-                                      fontSize: '0.65rem',
-                                      height: 18
-                                    }}
-                                  />
-                                </Box>
-                              </Box>
-                              <Box>
-                                <Typography variant="caption" color="text.secondary">
-                                  {caso.agente}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                  {formatDateTime(caso.dataHora).date} às {formatDateTime(caso.dataHora).time}
-                                </Typography>
-                              </Box>
-                            </Box>
-                          </ListItemButton>
-                        </ListItem>
-                      ))
-                    )}
-                  </List>
-                </Box>
+            {/* Sidebar desktop */}
+            {isDesk&&sidebar&&(
+              <Paper elevation={0} sx={{width:{lg:340,xl:380},flexShrink:0,borderRight:'1px solid rgba(255,255,255,0.07)',bgcolor:'background.paper',display:'flex',flexDirection:'column'}}>
+                <SidePanel/>
               </Paper>
             )}
 
-            <Box sx={{ flex: 1, position: 'relative', bgcolor: '#0a0a0a', mt: '64px' }}>
-              {loading && (
-                <Box sx={{ 
-                  position: 'absolute', 
-                  top: 0, 
-                  left: 0, 
-                  right: 0, 
-                  zIndex: 1000 
-                }}>
-                  <LinearProgress />
-                </Box>
-              )}
+            {/* Drawer mobile/tablet */}
+            {!isDesk&&(
+              <SwipeableDrawer anchor="left" open={sidebar} onOpen={()=>setSidebar(true)} onClose={()=>setSidebar(false)}
+                disableBackdropTransition={!isMobile} disableDiscovery={isMobile}
+                PaperProps={{sx:{width:{xs:'86vw',sm:340},bgcolor:'#111'}}}>
+                <SidePanel/>
+              </SwipeableDrawer>
+            )}
 
-              <LoadScript 
-                googleMapsApiKey={googleMapsApiKey}
-                loadingElement={<CircularProgress sx={{ position: 'absolute', top: '50%', left: '50%' }} />}
-              >
-                <MemoizedMap
-                  mapCenter={mapCenter}
-                  mapZoom={mapZoom}
-                  mapType={mapType}
-                  viewMode={viewMode}
-                  gruposBairro={gruposBairro}
-                  casosFiltrados={casosFiltrados}
-                  selectedInfoWindow={selectedInfoWindow}
-                  onMarkerClick={handleMarkerClick}
-                  onGroupClick={handleGroupClick}
-                  onInfoWindowClose={handleInfoWindowClose}
-                />
+            {/* Mapa */}
+            <Box sx={{flex:1,position:'relative',overflow:'hidden'}}>
+              {loading&&<LinearProgress sx={{position:'absolute',top:0,left:0,right:0,zIndex:20}}/>}
+
+              <LoadScript googleMapsApiKey={MAPS_KEY} libraries={MAPS_LIBS}
+                loadingElement={
+                  <Box sx={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',bgcolor:'#e8eaed',flexDirection:'column',gap:2}}>
+                    <CircularProgress color="primary"/>
+                    <Typography variant="caption" color="text.secondary">A carregar mapa…</Typography>
+                  </Box>
+                }>
+               // No componente principal MapaCasos, onde o MemoizedMap é usado:
+<MemoizedMap
+  center={center} 
+  zoom={zoom} 
+  mapType={mapType} 
+  viewMode={viewMode} 
+  showHeatmap={heatmap}
+  grupos={gruposF} 
+  casos={casosF} 
+  infoId={infoId}
+  onCase={goToCase} 
+  onGroup={goToGroup} 
+  onClose={() => setInfoId(null)} // Importante: limpar o infoId quando fechar
+/>
               </LoadScript>
 
-              {/* Card de Legenda - MODIFICADO: com show/hide */}
-              {showLegend && (
-                <Card 
-                  elevation={3} 
-                  sx={{ 
-                    position: 'absolute', 
-                    bottom: 16, 
-                    right: 16, 
-                    p: 2,
-                    bgcolor: 'rgba(26, 26, 26, 0.95)',
-                    backdropFilter: 'blur(10px)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 2,
-                    minWidth: 200,
-                    zIndex: 10,
-                    animation: 'fadeIn 0.3s ease-in-out',
-                    '@keyframes fadeIn': {
-                      '0%': { opacity: 0, transform: 'translateY(10px)' },
-                      '100%': { opacity: 1, transform: 'translateY(0)' }
-                    }
-                  }}
-                >
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <LayersIcon fontSize="small" />
-                      Legenda do Mapa
-                    </Typography>
-                    <IconButton size="small" onClick={() => setShowLegend(false)} sx={{ p: 0.5 }}>
-                      <CloseIcon fontSize="small" />
-                    </IconButton>
+              {/* Pill contagem */}
+              <Box sx={{
+                position:'absolute',top:10,
+                left:isDesk&&sidebar?{lg:348,xl:388}:10,
+                transition:'left .25s',
+                bgcolor:'rgba(255,255,255,0.96)',borderRadius:20,px:1.5,py:.5,zIndex:10,
+                boxShadow:'0 1px 6px rgba(0,0,0,0.2)',display:'flex',alignItems:'center',gap:.7,
+              }}>
+                {viewMode==='agrupado'?<LocationCityIcon sx={{fontSize:13,color:'#1a73e8'}}/>:<PeopleIcon sx={{fontSize:13,color:'#1a73e8'}}/>}
+                <Typography sx={{fontSize:'0.7rem',fontWeight:700,color:'#3c4043'}}>
+                  {viewMode==='agrupado'?`${Object.keys(gruposF).length} bairros`:`${casosF.length} casos`}
+                  {nActiveF>0&&` · ${nActiveF} filtro${nActiveF>1?'s':''}`}
+                </Typography>
+              </Box>
+
+              {/* Legenda */}
+              {legend&&(
+                <Card elevation={3} sx={{
+                  position:'absolute',bottom:{xs:80,sm:24},right:{xs:10,sm:14},
+                  bgcolor:'rgba(255,255,255,0.97)',borderRadius:2,p:1.5,minWidth:140,zIndex:10,
+                  boxShadow:'0 2px 8px rgba(0,0,0,0.18)',border:'1px solid rgba(0,0,0,0.07)',
+                }}>
+                  <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:.7}}>
+                    <Typography sx={{fontWeight:700,color:'#3c4043',fontSize:'0.66rem',textTransform:'uppercase',letterSpacing:.4}}>Legenda</Typography>
+                    <IconButton size="small" onClick={()=>setLegend(false)} sx={{p:.2,color:'#5f6368'}}><CloseIcon sx={{fontSize:12}}/></IconButton>
                   </Box>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {[
-                      { status: 'confirmado', label: 'Confirmado', color: '#ff5252' },
-                      { status: 'suspeito', label: 'Suspeito', color: '#ffab40' },
-                      { status: 'pendente-analise', label: 'Pendente', color: '#40c4ff' },
-                      { status: 'descartado', label: 'Descartado', color: '#69f0ae' }
-                    ].map((item) => (
-                      <Box key={`legenda-${item.status}`} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ 
-                          width: 12, 
-                          height: 12, 
-                          borderRadius: '50%', 
-                          bgcolor: item.color 
-                        }} />
-                        <Typography variant="body2" fontSize="0.8rem">
-                          {item.label}
-                        </Typography>
-                      </Box>
-                    ))}
-                    {viewMode === 'agrupado' && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                        <Avatar sx={{ 
-                          bgcolor: '#ff5722',
-                          width: 20,
-                          height: 20,
-                          fontSize: '0.7rem',
-                          fontWeight: 'bold'
-                        }}>
-                          3
-                        </Avatar>
-                        <Typography variant="caption">
-                          Tamanho = número de casos
-                        </Typography>
-                      </Box>
-                    )}
-                  </Box>
+                  {[{l:'Confirmado',c:'#ea4335',i:'!'},{l:'Suspeito',c:'#fbbc05',i:'?'},{l:'Pendente',c:'#4285f4',i:'·'},{l:'Descartado',c:'#34a853',i:'✓'}].map(({l,c,i})=>(
+                    <Box key={l} sx={{display:'flex',alignItems:'center',gap:.7,mb:.45}}>
+                      <Box component="img" src={buildPin(c,i,18)} sx={{width:15,height:21,flexShrink:0}} alt=""/>
+                      <Typography sx={{fontSize:'0.71rem',color:'#3c4043',fontWeight:500}}>{l}</Typography>
+                    </Box>
+                  ))}
+                  {viewMode==='agrupado'&&(
+                    <Box sx={{display:'flex',alignItems:'center',gap:.7,mt:.4,pt:.4,borderTop:'1px solid rgba(0,0,0,0.07)'}}>
+                      <Box component="img" src={buildCluster('#ea4335',5,18)} sx={{width:18,height:18}} alt=""/>
+                      <Typography sx={{fontSize:'0.65rem',color:'#5f6368'}}>Cluster = nº casos</Typography>
+                    </Box>
+                  )}
+                  {heatmap&&(
+                    <Box sx={{display:'flex',alignItems:'center',gap:.7,mt:.3}}>
+                      <Box sx={{width:20,height:7,borderRadius:1,background:'linear-gradient(to right,#00f,#0f0,#ff0,#f00)'}}/>
+                      <Typography sx={{fontSize:'0.65rem',color:'#5f6368'}}>Heatmap</Typography>
+                    </Box>
+                  )}
                 </Card>
               )}
-{/* Card de Estatísticas Rápidas - Canto Superior Esquerdo */}
-<Card 
-  elevation={3} 
-  sx={{ 
-    position: 'absolute', 
-    top: 16,  // 16px do topo
-    left: showSidebar ? 340 : 16,  // Se sidebar visível, posiciona à direita dela (340px), senão 16px da esquerda
-    p: 1,
-    bgcolor: 'rgba(26, 26, 26, 0.95)',
-    backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 2,
-    minWidth: 'auto',
-    zIndex: 10,
-    transition: 'left 0.3s ease'
-  }}
->
-  <Box sx={{ 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: 1,
-    whiteSpace: 'nowrap'
-  }}>
-    {viewMode === 'agrupado' ? 
-      <LocationCityIcon sx={{ fontSize: 14, color: 'primary.main' }} /> : 
-      <PeopleIcon sx={{ fontSize: 14, color: 'primary.main' }} />
-    }
-    
-    <Typography variant="caption" fontWeight="bold" sx={{ lineHeight: 1 }}>
-      {viewMode === 'agrupado' ? 'Bairros' : 'Casos'}:
-    </Typography>
-    
-    <Typography variant="body2" color="primary.main" fontWeight="bold" sx={{ lineHeight: 1 }}>
-      {viewMode === 'agrupado' ? Object.keys(gruposBairro).length : casosFiltrados.length}
-    </Typography>
-    
-    {dateFilter && (
-      <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, ml: 0.5 }}>
-        ({format(dateFilter, 'dd/MM')})
-      </Typography>
-    )}
-  </Box>
-</Card>
+
+              {/* Zoom */}
+              <Box sx={{
+                position:'absolute',bottom:{xs:96,sm:24},right:{xs:10,sm:legend?170:14},
+                transition:'right .25s',
+                display:'flex',flexDirection:'column',zIndex:10,
+                boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,overflow:'hidden',
+              }}>
+                <IconButton onClick={()=>setZoom(p=>Math.min(p+1,21))} size="small"
+                  sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:36,height:36,borderBottom:'1px solid #e0e0e0','&:hover':{bgcolor:'#f5f5f5'}}}>
+                  <ZoomInIcon sx={{fontSize:19}}/>
+                </IconButton>
+                <IconButton onClick={()=>setZoom(p=>Math.max(p-1,1))} size="small"
+                  sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:36,height:36,'&:hover':{bgcolor:'#f5f5f5'}}}>
+                  <ZoomOutIcon sx={{fontSize:19}}/>
+                </IconButton>
+              </Box>
+
+              {/* Centrar */}
+              <Tooltip title="Centrar em Luanda">
+                <IconButton onClick={()=>{setCenter({lat:-8.8368,lng:13.2343});setZoom(12);}}
+                  sx={{
+                    position:'absolute',
+                    bottom:{xs:144,sm:68},right:{xs:10,sm:legend?170:14},
+                    transition:'right .25s',
+                    zIndex:10,bgcolor:'white',color:'#5f6368',width:36,height:36,
+                    boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'},
+                  }}>
+                  <MyLocationIcon sx={{fontSize:18}}/>
+                </IconButton>
+              </Tooltip>
+
+              {/* FAB mobile */}
+              {!isDesk&&(
+                <Zoom in={!sidebar}>
+                  <Fab size="small" color="primary" onClick={()=>setSidebar(true)}
+                    sx={{position:'absolute',bottom:24,left:16,zIndex:10}}>
+                    <Badge badgeContent={nActiveF||undefined} color="warning" variant="dot">
+                      <FilterIcon/>
+                    </Badge>
+                  </Fab>
+                </Zoom>
+              )}
             </Box>
           </Box>
 
-          {/* Drawer de Detalhes */}
-          <Drawer
-            anchor="right"
-            open={drawerOpen}
-            onClose={() => setDrawerOpen(false)}
-            PaperProps={{
-              sx: { 
-                width: 400, 
-                bgcolor: 'background.paper',
-                backgroundImage: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
-                backdropFilter: 'blur(20px)'
-              }
-            }}
-          >
-            {selectedCase && (
-              <Box sx={{ p: 3 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                  <Typography variant="h6" fontWeight="bold">
-                    {selectedCase.status === 'agrupado' ? '📊 Detalhes do Agrupamento' : '📋 Detalhes do Caso'}
-                  </Typography>
-                  <IconButton onClick={() => setDrawerOpen(false)}>
-                    <CloseIcon />
-                  </IconButton>
-                </Box>
+          {/* Drawer Detalhes */}
+          <Drawer anchor="right" open={detailOpen} onClose={()=>setDetail(false)}
+            PaperProps={{sx:{width:{xs:'100vw',sm:380,md:420},bgcolor:'#0e0e0e'}}}>
+            {sel&&(
+              <Box sx={{display:'flex',flexDirection:'column',height:'100%'}}>
 
-                <Card elevation={2} sx={{ mb: 3, borderRadius: 2 }}>
-                  <CardContent>
-                    <Typography variant="subtitle1" fontWeight="bold" color="primary.main" gutterBottom>
-                      {selectedCase.status === 'agrupado' ? '📍 Localização do Agrupamento' : '👤 Identificação'}
-                    </Typography>
-                    {selectedCase.status === 'agrupado' ? (
-                      <>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                          <LocationCityIcon color="primary" />
-                          <Typography variant="h6">
-                            {selectedCase.bairro}
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" gutterBottom sx={{ color: 'text.secondary', mb: 2 }}>
-                          {selectedCase.descricao}
-                        </Typography>
-                      </>
-                    ) : (
-                      <>
-                        <Typography variant="body2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <strong>🆔 ID:</strong> <code>{selectedCase.id}</code>
-                        </Typography>
-                        <Typography variant="body2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <strong>👨‍⚕️ Agente:</strong> {selectedCase.agente}
-                        </Typography>
-                        <Typography variant="body2" gutterBottom sx={{ color: 'text.secondary', mt: 2 }}>
-                          {selectedCase.descricao}
-                        </Typography>
-                      </>
-                    )}
-                    {selectedCase.bairro && selectedCase.status !== 'agrupado' && (
-                      <Typography variant="body2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-                        <strong>🏘️ Bairro:</strong> {selectedCase.bairro}
+                {/* Header colorido */}
+                <Box sx={{
+                  px:2.5,py:2,flexShrink:0,
+                  background:sel.status==='agrupado'
+                    ?'linear-gradient(135deg,rgba(26,115,232,0.22) 0%,rgba(26,115,232,0.05) 100%)'
+                    :`linear-gradient(135deg,${sc(sel.status)}33 0%,${sc(sel.status)}08 100%)`,
+                  borderBottom:`1px solid ${sel.status==='agrupado'?'#1a73e8':sc(sel.status)}35`,
+                }}>
+                  <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                    <Box>
+                      <Typography variant="h6" fontWeight={800} sx={{fontSize:'0.98rem',lineHeight:1.2}}>
+                        {sel.status==='agrupado'?'📊 ':'📋 '}{sel.bairro||'Caso sem bairro'}
                       </Typography>
-                    )}
-                    <Typography variant="body2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-                      <strong>📱 Dispositivo:</strong> {selectedCase.dispositivo}
-                    </Typography>
-                  </CardContent>
-                </Card>
-
-                <Card elevation={2} sx={{ mb: 3, borderRadius: 2 }}>
-                  <CardContent>
-                    <Typography variant="subtitle1" fontWeight="bold" color="primary.main" gutterBottom>
-                      ⚠️ Status e Gravidade
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                      {selectedCase.status === 'agrupado' ? (
-                        <>
-                          <Chip
-                            label={`${selectedCase.notas.split('Confirmados: ')[1]?.split(',')[0] || 0} confirmados`}
-                            sx={{
-                              bgcolor: '#ff5252',
-                              color: 'white',
-                              fontWeight: 'bold',
-                            }}
-                          />
-                          <Chip
-                            label={`${selectedCase.notas.split('Suspeitos: ')[1]?.split(')')[0] || 0} suspeitos`}
-                            sx={{
-                              bgcolor: '#ffab40',
-                              color: 'white',
-                              fontWeight: 'bold',
-                            }}
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <Chip
-                            label={selectedCase.status}
-                            sx={{
-                              bgcolor: getStatusColor(selectedCase.status),
-                              color: 'white',
-                              fontWeight: 'bold',
-                            }}
-                          />
-                          <Chip
-                            label={selectedCase.gravidade}
-                            sx={{
-                              bgcolor: getGravidadeColor(selectedCase.gravidade),
-                              color: 'white',
-                              fontWeight: 'bold',
-                            }}
-                          />
-                        </>
+                      {sel.status!=='agrupado'&&(
+                        <Box sx={{display:'flex',gap:.6,mt:.8,flexWrap:'wrap'}}>
+                          <Chip label={sel.status} size="small" sx={{bgcolor:sc(sel.status),color:'white',fontWeight:700,fontSize:'0.68rem'}}/>
+                          <Chip label={sel.gravidade} size="small" sx={{bgcolor:gc(sel.gravidade),color:'white',fontWeight:700,fontSize:'0.68rem'}}/>
+                        </Box>
                       )}
                     </Box>
-                    {selectedCase.notas && selectedCase.status !== 'agrupado' && (
-                      <Box sx={{ mt: 2 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          <strong>📝 Notas:</strong> {selectedCase.notas}
-                        </Typography>
-                      </Box>
-                    )}
-                  </CardContent>
-                </Card>
+                    <IconButton size="small" onClick={()=>setDetail(false)}><CloseIcon sx={{fontSize:18}}/></IconButton>
+                  </Box>
+                </Box>
 
-                <Card elevation={2} sx={{ mb: 3, borderRadius: 2 }}>
-                  <CardContent>
-                    <Typography variant="subtitle1" fontWeight="bold" color="primary.main" gutterBottom>
-                      📍 Localização Geográfica
-                    </Typography>
-                    <Typography variant="body2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <strong>🌐 Latitude:</strong> {selectedCase.coordenadas.lat.toFixed(6)}
-                    </Typography>
-                    <Typography variant="body2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <strong>🌐 Longitude:</strong> {selectedCase.coordenadas.lng.toFixed(6)}
-                    </Typography>
-                    <Typography variant="body2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <strong>🎯 Precisão:</strong> {selectedCase.coordenadas.precisao.toFixed(1)} metros
-                    </Typography>
-                    {selectedCase.status === 'agrupado' && (
-                      <Typography variant="body2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-                        <strong>📊 Total de casos:</strong> {gruposBairro[selectedCase.bairro]?.casos?.length || 0}
-                      </Typography>
-                    )}
-                  </CardContent>
-                </Card>
+                {/* Corpo */}
+                <Box sx={{flex:1,overflow:'auto',px:2.5,py:2}}>
+                  {sel.status==='agrupado'?(
+                    <>
+                      <Grid container spacing={1} sx={{mb:2}}>
+                        {[{l:'Total',v:sel._g?.casos.length,c:'#1a73e8'},{l:'Confirmados',v:sel._g?.confirmados,c:'#ea4335'},{l:'Suspeitos',v:sel._g?.suspeitos,c:'#fbbc05'},{l:'Pendentes',v:sel._g?.pendentes,c:'#4285f4'}].map(({l,v,c})=>(
+                          <Grid item xs={6} key={l}>
+                            <Card elevation={0} sx={{p:1.5,textAlign:'center'}}>
+                              <Typography fontWeight={800} color={c} sx={{fontSize:'1.2rem'}}>{v||0}</Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{fontSize:'0.65rem'}}>{l}</Typography>
+                            </Card>
+                          </Grid>
+                        ))}
+                      </Grid>
+                      <Typography variant="subtitle2" sx={{color:'primary.main',mb:1,fontWeight:700,fontSize:'0.8rem'}}>Casos neste Bairro</Typography>
+                      <List dense sx={{p:0}}>
+                        {sel._g?.casos.slice(0,10).map(c=>(
+                          <ListItemButton key={c.id} onClick={()=>{goToCase(c);}}
+                            sx={{borderLeft:`3px solid ${sc(c.status)}`,mb:.3,borderRadius:1.5,px:1.5}}>
+                            <Box sx={{width:'100%'}}>
+                              <Box sx={{display:'flex',justifyContent:'space-between'}}>
+                                <Typography variant="caption" fontWeight={600} sx={{fontSize:'0.73rem'}}>{c.agente}</Typography>
+                                <Chip label={c.gravidade} size="small" sx={{bgcolor:gc(c.gravidade),color:'white',height:14,fontSize:'0.52rem'}}/>
+                              </Box>
+                              <Typography variant="caption" color="text.secondary" sx={{fontSize:'0.66rem'}}>{fdt(c.dataHora).date} · {c.status}</Typography>
+                            </Box>
+                          </ListItemButton>
+                        ))}
+                        {sel._g?.casos.length>10&&<Typography variant="caption" color="text.disabled" sx={{pl:1.5,fontSize:'0.67rem'}}>+ {sel._g.casos.length-10} mais…</Typography>}
+                      </List>
+                    </>
+                  ):(
+                    <Grid container spacing={1.5}>
+                      {[
+                        {title:'Identificação',fields:[{l:'ID',v:<code style={{fontSize:'0.7rem',background:'rgba(255,255,255,0.07)',padding:'2px 5px',borderRadius:3}}>{sel.id}</code>},{l:'Agente',v:sel.agente},{l:'Dispositivo',v:sel.dispositivo}]},
+                        {title:'Localização',fields:[{l:'Bairro',v:sel.bairro},{l:'Latitude',v:sel.coordenadas.lat.toFixed(7)},{l:'Longitude',v:sel.coordenadas.lng.toFixed(7)},{l:'Precisão GPS',v:`${sel.coordenadas.precisao?.toFixed(0)||'—'} m`}]},
+                        {title:'Registo Temporal',fields:[{l:'Data',v:fdt(sel.dataHora).date},{l:'Hora',v:fdt(sel.dataHora).time},{l:'Timestamp',v:new Date(sel.timestamp).toLocaleString('pt-AO',{timeZone:'Africa/Luanda'})}]},
+                      ].map(({title,fields})=>(
+                        <Grid item xs={12} key={title}>
+                          <Card elevation={0} sx={{p:1.8}}>
+                            <Typography variant="caption" sx={{color:'primary.main',textTransform:'uppercase',letterSpacing:.8,fontSize:'0.6rem',fontWeight:700}}>{title}</Typography>
+                            <Box sx={{mt:.8,display:'flex',flexDirection:'column',gap:.6}}>
+                              {fields.map(({l,v})=>(
+                                <Box key={l}>
+                                  <Typography variant="caption" sx={{color:'text.disabled',fontSize:'0.62rem'}}>{l}</Typography>
+                                  <Typography variant="body2" sx={{fontSize:'0.8rem'}}>{v||'—'}</Typography>
+                                </Box>
+                              ))}
+                            </Box>
+                          </Card>
+                        </Grid>
+                      ))}
+                      {sel.notas&&(
+                        <Grid item xs={12}>
+                          <Card elevation={0} sx={{p:1.8,borderLeft:'3px solid rgba(255,255,255,0.12)'}}>
+                            <Typography variant="caption" sx={{color:'primary.main',textTransform:'uppercase',letterSpacing:.8,fontSize:'0.6rem',fontWeight:700}}>Notas</Typography>
+                            <Typography variant="body2" sx={{mt:.7,fontSize:'0.8rem',lineHeight:1.6,color:'rgba(255,255,255,0.75)'}}>{sel.notas}</Typography>
+                          </Card>
+                        </Grid>
+                      )}
+                    </Grid>
+                  )}
+                </Box>
 
-                <Card elevation={2} sx={{ mb: 3, borderRadius: 2 }}>
-                  <CardContent>
-                    <Typography variant="subtitle1" fontWeight="bold" color="primary.main" gutterBottom>
-                      📅 Data e Hora do Registro
-                    </Typography>
-                    {selectedCase.status === 'agrupado' ? (
-                      <Typography variant="body2" gutterBottom>
-                        Vários registros entre {format(subDays(new Date(), 2), 'dd/MM/yyyy')} e {format(new Date(), 'dd/MM/yyyy')}
-                      </Typography>
-                    ) : (
-                      <>
-                        <Typography variant="body2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <strong>📅 Data:</strong> {formatDateTime(selectedCase.dataHora).date}
-                        </Typography>
-                        <Typography variant="body2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <strong>⏰ Hora:</strong> {formatDateTime(selectedCase.dataHora).time}
-                        </Typography>
-                      </>
-                    )}
-                    <Typography variant="body2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-                      <strong>🕐 Timestamp:</strong> {new Date(selectedCase.timestamp).toLocaleString('pt-BR', { timeZone: 'Africa/Luanda' })}
-                    </Typography>
-                  </CardContent>
-                </Card>
-
-                <Divider sx={{ my: 2 }} />
-
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<VisibilityIcon />}
-                    onClick={() => {
-                      setMapCenter(selectedCase.coordenadas);
-                      setDrawerOpen(false);
-                    }}
-                    sx={{ borderRadius: 2, flex: 1 }}
-                  >
-                    Centrar no Mapa
+                {/* Acções */}
+                <Box sx={{px:2.5,py:2,borderTop:'1px solid rgba(255,255,255,0.07)',display:'flex',gap:1,flexWrap:'wrap',flexShrink:0}}>
+                  <Button variant="contained" color="primary" startIcon={<VisibilityIcon/>}
+                    onClick={()=>{setCenter(sel.coordenadas);setZoom(17);setDetail(false);}}
+                    sx={{flex:1,minWidth:95,borderRadius:2,fontSize:'0.76rem'}}>
+                    Ver no Mapa
                   </Button>
-                  {selectedCase.status !== 'agrupado' && (
-                    <Button
-                      variant="outlined"
-                      color="secondary"
-                      startIcon={<PhoneIcon />}
-                      onClick={() => addNotification(`Contactando agente ${selectedCase.agente}...`, 'info')}
-                      sx={{ borderRadius: 2, flex: 1 }}
-                    >
-                      Contactar Agente
-                    </Button>
+                  {sel.status!=='agrupado'&&(
+                    <>
+                      <Button variant="outlined" color="secondary" startIcon={<PhoneIcon/>}
+                        onClick={()=>addN(`Contactando ${sel.agente}…`,'info')}
+                        sx={{flex:1,minWidth:95,borderRadius:2,fontSize:'0.76rem'}}>
+                        Contactar
+                      </Button>
+                      <Button variant="outlined" color="warning" startIcon={<AlertIcon/>}
+                        onClick={()=>addN(`Alerta criado — caso ${sel.id}`,'warning')}
+                        sx={{flex:1,minWidth:95,borderRadius:2,fontSize:'0.76rem'}}>
+                        Alerta
+                      </Button>
+                    </>
                   )}
                 </Box>
               </Box>
             )}
           </Drawer>
 
-          <Dialog open={showDateFilter} onClose={() => setShowDateFilter(false)} PaperProps={{ sx: { borderRadius: 2 } }}>
-            <DialogTitle>📅 Filtrar por data</DialogTitle>
+          {/* Dialog datas */}
+          <Dialog open={Boolean(dateDlg)} onClose={()=>setDateDlg(null)}
+            PaperProps={{sx:{borderRadius:3,bgcolor:'#1a1a1a',minWidth:{xs:290,sm:340}}}}>
+            <DialogTitle sx={{fontSize:'0.95rem',fontWeight:700}}>{dateDlg==='from'?'📅 Data de início':'📅 Data de fim'}</DialogTitle>
             <DialogContent>
               <DatePicker
-                label="Selecione uma data"
-                value={dateFilter}
-                onChange={(newValue) => setDateFilter(newValue)}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    margin: 'normal',
-                    sx: { mt: 2 }
-                  }
-                }}
+                label={dateDlg==='from'?'De':'Até'}
+                value={dateDlg==='from'?F.dateFrom:F.dateTo}
+                onChange={v=>setF(dateDlg==='from'?'dateFrom':'dateTo',v)}
+                slotProps={{textField:{fullWidth:true,sx:{mt:1}}}}
               />
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => {
-                setDateFilter(null);
-                setShowDateFilter(false);
-              }}>
-                Limpar filtro
-              </Button>
-              <Button onClick={() => setShowDateFilter(false)} variant="contained">
-                Aplicar
-              </Button>
+              <Button onClick={()=>{setF(dateDlg==='from'?'dateFrom':'dateTo',null);setDateDlg(null);}} color="warning">Limpar</Button>
+              <Button onClick={()=>setDateDlg(null)} variant="contained">Aplicar</Button>
             </DialogActions>
           </Dialog>
 
-          <Snackbar
-            open={showNotification}
-            autoHideDuration={6000}
-            onClose={() => setShowNotification(false)}
-            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-          >
-            <Alert
-              onClose={() => setShowNotification(false)}
-              severity={notifications.length > 0 ? notifications[notifications.length - 1].severity : 'info'}
-              sx={{ width: '100%', borderRadius: 2 }}
-            >
-              {notifications.length > 0 ? notifications[notifications.length - 1].message : ''}
+          {/* Snackbar */}
+          <Snackbar open={showNotif} autoHideDuration={4000} onClose={()=>setShowN(false)}
+            anchorOrigin={{vertical:'bottom',horizontal:isMobile?'center':'right'}}
+            sx={{mb:{xs:7,sm:2}}}>
+            <Alert severity={notifs.at(-1)?.sev||'info'} onClose={()=>setShowN(false)}
+              sx={{borderRadius:2,minWidth:230}} variant="filled">
+              {notifs.at(-1)?.msg||''}
             </Alert>
           </Snackbar>
 
-          {/* Controles do Mapa */}
-          <Box sx={{ position: 'fixed', top: 180, right: 16, display: 'flex', flexDirection: 'column', gap: 1, zIndex: 1000 }}>
-            <Fab size="medium" color="primary" onClick={handleZoomIn} sx={{ boxShadow: 3, borderRadius: 2 }}>
-              <ZoomInIcon />
-            </Fab>
-            <Fab size="medium" color="primary" onClick={handleZoomOut} sx={{ boxShadow: 3, borderRadius: 2 }}>
-              <ZoomOutIcon />
-            </Fab>
-            <Fab size="medium" color="secondary" onClick={() => setMapCenter({ lat: -7.6063, lng: 15.0548 })} sx={{ boxShadow: 3, borderRadius: 2 }}>
-              <MyLocationIcon />
-            </Fab>
-          </Box>
         </Box>
       </LocalizationProvider>
     </ThemeProvider>
