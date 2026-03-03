@@ -910,6 +910,7 @@ export default function MapaCasos() {
                 <MapIcon sx={{color:'#1a73e8',fontSize:{xs:20,sm:26}}}/>
                 <Box>
                   <Typography fontWeight={800} sx={{fontSize:{xs:'0.82rem',sm:'1rem'},lineHeight:1.1}}>VigiCólera</Typography>
+                  {!isMobile&&<Typography sx={{fontSize:'0.58rem',color:'#00bcd4',lineHeight:1}}>Uige · Monitoramento</Typography>}
                 </Box>
               </Box>
 
