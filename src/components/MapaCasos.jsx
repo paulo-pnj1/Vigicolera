@@ -367,6 +367,9 @@ export default function MapaCasos() {
   const [previewUrl, setPreviewUrl]         = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  // ── NOVO: painel análise desktop ────────────────────────────────────────
+  const [showAnalyse, setShowAnalyse] = useState(false);
+
   // Navegação mobile — 0=mapa, 1=lista, 2=análise
   const [mobileTab, setMobileTab] = useState(0);
 
@@ -1015,6 +1018,13 @@ export default function MapaCasos() {
                       </IconButton>
                     </span></Tooltip>
                     <Tooltip title="Partilhar"><IconButton size="small" color="inherit" onClick={share}><ShareIcon sx={{fontSize:18}}/></IconButton></Tooltip>
+                    <Divider orientation="vertical" flexItem sx={{borderColor:'rgba(255,255,255,0.12)',mx:.5}}/>
+                    <Tooltip title={showAnalyse?'Fechar Análise':'Painel de Análise'}>
+                      <IconButton size="small" onClick={()=>setShowAnalyse(v=>!v)}
+                        sx={{bgcolor:showAnalyse?'rgba(0,188,212,0.2)':'rgba(255,255,255,0.07)',color:showAnalyse?'secondary.main':'inherit',borderRadius:1.5}}>
+                        <DashboardIcon sx={{fontSize:18}}/>
+                      </IconButton>
+                    </Tooltip>
                   </>
                 )}
 
@@ -1095,10 +1105,10 @@ export default function MapaCasos() {
                     <IconButton onClick={()=>setZoom(p=>Math.min(p+1,21))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:42,height:42,borderBottom:'1px solid #e0e0e0','&:hover':{bgcolor:'#f5f5f5'}}}><ZoomInIcon sx={{fontSize:21}}/></IconButton>
                     <IconButton onClick={()=>setZoom(p=>Math.max(p-1,1))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:42,height:42,'&:hover':{bgcolor:'#f5f5f5'}}}><ZoomOutIcon sx={{fontSize:21}}/></IconButton>
                   </Box>
-                 <IconButton onClick={()=>{ const {center:nc,zoom:nz}=calculateBounds(casosF.length>0?casosF:casos); setCenter(nc); setZoom(nz); }}
-  sx={{position:'absolute',bottom:76,right:10,zIndex:10,bgcolor:'white',color:'#5f6368',width:42,height:42,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
-  <MyLocationIcon sx={{fontSize:20}}/>
-</IconButton>
+                  <IconButton onClick={()=>{setCenter({lat:-8.8368,lng:13.2343});setZoom(12);}}
+                    sx={{position:'absolute',bottom:76,right:10,zIndex:10,bgcolor:'white',color:'#5f6368',width:42,height:42,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
+                    <MyLocationIcon sx={{fontSize:20}}/>
+                  </IconButton>
                   {legend&&(
                     <Card elevation={2} sx={{position:'absolute',bottom:16,left:10,bgcolor:'rgba(255,255,255,0.96)',borderRadius:2,p:1,minWidth:105,zIndex:10}}>
                       <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:.4}}>
@@ -1122,60 +1132,115 @@ export default function MapaCasos() {
                 </Box>
               </Box>
             ) : (
-              <Box sx={{flex:1,position:'relative',overflow:'hidden'}}>
-                {loading&&<LinearProgress sx={{position:'absolute',top:0,left:0,right:0,zIndex:20}}/>}
-                <LoadScript googleMapsApiKey={MAPS_KEY} libraries={MAPS_LIBS}
-                  loadingElement={<Box sx={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',bgcolor:'#e8eaed',flexDirection:'column',gap:2}}><CircularProgress color="primary"/><Typography variant="caption" color="text.secondary">A carregar mapa…</Typography></Box>}>
-                  <MemoizedMap center={center} zoom={zoom} mapType={mapType} viewMode={viewMode}
-                    showHeatmap={heatmap} grupos={gruposF} casos={casosF} infoId={infoId}
-                    onCase={goToCase} onGroup={goToGroup} onClose={()=>setInfoId(null)}/>
-                </LoadScript>
-                <Box sx={{position:'absolute',top:10,left:isDesk&&sidebar?{lg:348,xl:388}:10,transition:'left .25s',bgcolor:'rgba(255,255,255,0.96)',borderRadius:20,px:1.5,py:.5,zIndex:10,boxShadow:'0 1px 6px rgba(0,0,0,0.2)',display:'flex',alignItems:'center',gap:.7}}>
-                  {viewMode==='agrupado'?<LocationCityIcon sx={{fontSize:13,color:'#1a73e8'}}/>:<PeopleIcon sx={{fontSize:13,color:'#1a73e8'}}/>}
-                  <Typography sx={{fontSize:'0.7rem',fontWeight:700,color:'#3c4043'}}>
-                    {viewMode==='agrupado'?`${Object.keys(gruposF).length} bairros`:`${casosF.length} casos`}
-                    {nActiveF>0&&` · ${nActiveF} filtro${nActiveF>1?'s':''}`}
-                  </Typography>
-                </Box>
-                {legend&&(
-                  <Card elevation={3} sx={{position:'absolute',bottom:24,right:14,bgcolor:'rgba(255,255,255,0.97)',borderRadius:2,p:1.5,minWidth:140,zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.18)',border:'1px solid rgba(0,0,0,0.07)'}}>
-                    <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:.7}}>
-                      <Typography sx={{fontWeight:700,color:'#3c4043',fontSize:'0.66rem',textTransform:'uppercase',letterSpacing:.4}}>Legenda</Typography>
-                      <IconButton size="small" onClick={()=>setLegend(false)} sx={{p:.2,color:'#5f6368'}}><CloseIcon sx={{fontSize:12}}/></IconButton>
-                    </Box>
-                    {[{l:'Confirmado',c:'#ea4335',i:'!'},{l:'Suspeito',c:'#fbbc05',i:'?'},{l:'Pendente',c:'#4285f4',i:'·'},{l:'Descartado',c:'#34a853',i:'✓'}].map(({l,c,i})=>(
-                      <Box key={l} sx={{display:'flex',alignItems:'center',gap:.7,mb:.45}}>
-                        <Box component="img" src={buildPin(c,i,18)} sx={{width:15,height:21,flexShrink:0}} alt=""/>
-                        <Typography sx={{fontSize:'0.71rem',color:'#3c4043',fontWeight:500}}>{l}</Typography>
+              /* ── Desktop/Tablet: mapa + painel análise ───────────────── */
+              <Box sx={{flex:1,display:'flex',overflow:'hidden'}}>
+
+                {/* Mapa */}
+                <Box sx={{flex:1,position:'relative',overflow:'hidden'}}>
+                  {loading&&<LinearProgress sx={{position:'absolute',top:0,left:0,right:0,zIndex:20}}/>}
+                  <LoadScript googleMapsApiKey={MAPS_KEY} libraries={MAPS_LIBS}
+                    loadingElement={<Box sx={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',bgcolor:'#e8eaed',flexDirection:'column',gap:2}}><CircularProgress color="primary"/><Typography variant="caption" color="text.secondary">A carregar mapa…</Typography></Box>}>
+                    <MemoizedMap center={center} zoom={zoom} mapType={mapType} viewMode={viewMode}
+                      showHeatmap={heatmap} grupos={gruposF} casos={casosF} infoId={infoId}
+                      onCase={goToCase} onGroup={goToGroup} onClose={()=>setInfoId(null)}/>
+                  </LoadScript>
+
+                  {/* Pill contagem */}
+                  <Box sx={{position:'absolute',top:10,left:isDesk&&sidebar?{lg:348,xl:388}:10,transition:'left .25s',bgcolor:'rgba(255,255,255,0.96)',borderRadius:20,px:1.5,py:.5,zIndex:10,boxShadow:'0 1px 6px rgba(0,0,0,0.2)',display:'flex',alignItems:'center',gap:.7}}>
+                    {viewMode==='agrupado'?<LocationCityIcon sx={{fontSize:13,color:'#1a73e8'}}/>:<PeopleIcon sx={{fontSize:13,color:'#1a73e8'}}/>}
+                    <Typography sx={{fontSize:'0.7rem',fontWeight:700,color:'#3c4043'}}>
+                      {viewMode==='agrupado'?`${Object.keys(gruposF).length} bairros`:`${casosF.length} casos`}
+                      {nActiveF>0&&` · ${nActiveF} filtro${nActiveF>1?'s':''}`}
+                    </Typography>
+                  </Box>
+
+                  {/* Legenda */}
+                  {legend&&(
+                    <Card elevation={3} sx={{
+                      position:'absolute',bottom:24,
+                      right:showAnalyse?14:14,
+                      transition:'right .25s',
+                      bgcolor:'rgba(255,255,255,0.97)',borderRadius:2,p:1.5,minWidth:140,zIndex:10,
+                      boxShadow:'0 2px 8px rgba(0,0,0,0.18)',border:'1px solid rgba(0,0,0,0.07)',
+                    }}>
+                      <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:.7}}>
+                        <Typography sx={{fontWeight:700,color:'#3c4043',fontSize:'0.66rem',textTransform:'uppercase',letterSpacing:.4}}>Legenda</Typography>
+                        <IconButton size="small" onClick={()=>setLegend(false)} sx={{p:.2,color:'#5f6368'}}><CloseIcon sx={{fontSize:12}}/></IconButton>
                       </Box>
-                    ))}
-                  </Card>
-                )}
-                <Box sx={{position:'absolute',bottom:24,right:legend?170:14,transition:'right .25s',display:'flex',flexDirection:'column',zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,overflow:'hidden'}}>
-                  <IconButton onClick={()=>setZoom(p=>Math.min(p+1,21))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:36,height:36,borderBottom:'1px solid #e0e0e0','&:hover':{bgcolor:'#f5f5f5'}}}><ZoomInIcon sx={{fontSize:19}}/></IconButton>
-                  <IconButton onClick={()=>setZoom(p=>Math.max(p-1,1))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:36,height:36,'&:hover':{bgcolor:'#f5f5f5'}}}><ZoomOutIcon sx={{fontSize:19}}/></IconButton>
+                      {[{l:'Confirmado',c:'#ea4335',i:'!'},{l:'Suspeito',c:'#fbbc05',i:'?'},{l:'Pendente',c:'#4285f4',i:'·'},{l:'Descartado',c:'#34a853',i:'✓'}].map(({l,c,i})=>(
+                        <Box key={l} sx={{display:'flex',alignItems:'center',gap:.7,mb:.45}}>
+                          <Box component="img" src={buildPin(c,i,18)} sx={{width:15,height:21,flexShrink:0}} alt=""/>
+                          <Typography sx={{fontSize:'0.71rem',color:'#3c4043',fontWeight:500}}>{l}</Typography>
+                        </Box>
+                      ))}
+                    </Card>
+                  )}
+
+                  {/* Zoom */}
+                  <Box sx={{position:'absolute',bottom:24,right:legend?170:14,transition:'right .25s',display:'flex',flexDirection:'column',zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,overflow:'hidden'}}>
+                    <IconButton onClick={()=>setZoom(p=>Math.min(p+1,21))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:36,height:36,borderBottom:'1px solid #e0e0e0','&:hover':{bgcolor:'#f5f5f5'}}}><ZoomInIcon sx={{fontSize:19}}/></IconButton>
+                    <IconButton onClick={()=>setZoom(p=>Math.max(p-1,1))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:36,height:36,'&:hover':{bgcolor:'#f5f5f5'}}}><ZoomOutIcon sx={{fontSize:19}}/></IconButton>
+                  </Box>
+
+                  {/* Centrar */}
+                  <Tooltip title="Centrar em todos os casos">
+                    <IconButton onClick={()=>{ const {center:nc,zoom:nz}=calculateBounds(casosF.length>0?casosF:casos); setCenter(nc); setZoom(nz); }}
+                      sx={{position:'absolute',bottom:68,right:legend?170:14,transition:'right .25s',zIndex:10,bgcolor:'white',color:'#5f6368',width:36,height:36,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
+                      <MyLocationIcon sx={{fontSize:18}}/>
+                    </IconButton>
+                  </Tooltip>
                 </Box>
-              <Tooltip title="Centrar em todos os casos">
-  <IconButton onClick={()=>{ const {center:nc,zoom:nz}=calculateBounds(casosF.length>0?casosF:casos); setCenter(nc); setZoom(nz); }}
-    sx={{position:'absolute',bottom:68,right:legend?170:14,transition:'right .25s',zIndex:10,bgcolor:'white',color:'#5f6368',width:36,height:36,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
-    <MyLocationIcon sx={{fontSize:18}}/>
-  </IconButton>
-</Tooltip>
+
+                {/* ── Painel de Análise lateral direito (desktop) ────────── */}
+                {showAnalyse&&(
+                  <Paper elevation={0} sx={{
+                    width:{sm:320,md:360,lg:380,xl:420},
+                    flexShrink:0,
+                    borderLeft:'1px solid rgba(255,255,255,0.07)',
+                    bgcolor:'background.paper',
+                    display:'flex',
+                    flexDirection:'column',
+                    overflow:'hidden',
+                  }}>
+                    {/* Cabeçalho do painel */}
+                    <Box sx={{px:2,py:1.5,display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid rgba(255,255,255,0.08)',flexShrink:0,background:'linear-gradient(135deg,rgba(0,188,212,0.12) 0%,rgba(0,188,212,0.03) 100%)'}}>
+                      <Box sx={{display:'flex',alignItems:'center',gap:1}}>
+                        <DashboardIcon sx={{fontSize:16,color:'secondary.main'}}/>
+                        <Typography variant="subtitle2" fontWeight={700} sx={{fontSize:'0.85rem'}}>Análise</Typography>
+                      </Box>
+                      <IconButton size="small" onClick={()=>setShowAnalyse(false)} sx={{'&:hover':{bgcolor:'rgba(234,67,53,0.12)',color:'error.main'},borderRadius:1.5,transition:'all .2s'}}>
+                        <CloseIcon sx={{fontSize:16}}/>
+                      </IconButton>
+                    </Box>
+                    {/* Conteúdo scrollável */}
+                    <Box sx={{flex:1,overflow:'auto'}}>
+                      <AnalysePanel/>
+                    </Box>
+                  </Paper>
+                )}
               </Box>
             )}
           </Box>
 
-          {/* ── Bottom Navigation (apenas mobile) ───────────────────────────── */}
+          {/* ── Bottom Navigation fixo (apenas mobile) ──────────────────────── */}
           {isMobile&&(
-            <BottomNavigation value={mobileTab} onChange={(_,v)=>setMobileTab(v)} showLabels
-              sx={{height:bottomNavH,flexShrink:0,zIndex:1200}}>
-              <BottomNavigationAction label="Mapa"
-                icon={<Badge badgeContent={nActiveF||undefined} color="warning" variant="dot"><MapIcon/></Badge>}/>
-              <BottomNavigationAction label="Lista"
-                icon={<Badge badgeContent={casosF.length||undefined} color="primary" max={999}
-                  sx={{'& .MuiBadge-badge':{fontSize:'0.5rem',height:14,minWidth:14,top:2,right:-2}}}><ListNavIcon/></Badge>}/>
-              <BottomNavigationAction label="Análise" icon={<DashboardIcon/>}/>
-            </BottomNavigation>
+            <>
+              {/* Espaçador para compensar o nav fixo */}
+              <Box sx={{height:bottomNavH,flexShrink:0}}/>
+              <BottomNavigation value={mobileTab} onChange={(_,v)=>setMobileTab(v)} showLabels
+                sx={{
+                  position:'fixed',bottom:0,left:0,right:0,
+                  height:bottomNavH,zIndex:1300,
+                  boxShadow:'0 -2px 16px rgba(0,0,0,0.45)',
+                }}>
+                <BottomNavigationAction label="Mapa"
+                  icon={<Badge badgeContent={nActiveF||undefined} color="warning" variant="dot"><MapIcon/></Badge>}/>
+                <BottomNavigationAction label="Lista"
+                  icon={<Badge badgeContent={casosF.length||undefined} color="primary" max={999}
+                    sx={{'& .MuiBadge-badge':{fontSize:'0.5rem',height:14,minWidth:14,top:2,right:-2}}}><ListNavIcon/></Badge>}/>
+                <BottomNavigationAction label="Análise" icon={<DashboardIcon/>}/>
+              </BottomNavigation>
+            </>
           )}
 
           {/* ── Gaveta de Filtros (mobile bottom sheet) ───────────────────── */}
