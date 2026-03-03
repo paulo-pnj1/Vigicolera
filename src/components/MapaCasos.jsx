@@ -1,7 +1,4 @@
-/**
- * VigiCólera Uige — MapaCasos
- * Google Maps Light style + Filtros unificados + Todas as funcionalidades
- */
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box, Card, CardContent, Chip, Avatar, List, ListItem, ListItemButton,
