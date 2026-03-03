@@ -21,7 +21,7 @@ import {
   GetApp as GetAppIcon, SmartToy as SmartToyIcon, ExpandMore as ExpandMoreIcon,
   MoreVert as MoreVertIcon, ClearAll as ClearAllIcon, Layers as LayersIcon,
   Print as PrintIcon, Share as ShareIcon, NotificationsActive as AlertIcon,
-  List as ListNavIcon, Dashboard as DashboardIcon,
+  List as ListNavIcon, Dashboard as DashboardIcon, OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import { createTheme, ThemeProvider, useTheme } from '@mui/material/styles';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -362,6 +362,11 @@ export default function MapaCasos() {
   const [notifs, setNotifs]         = useState([]);
   const [showNotif, setShowN]       = useState(false);
 
+  // ── NOVO: estados para pré-visualização PDF ──────────────────────────────
+  const [previewOpen, setPreviewOpen]       = useState(false);
+  const [previewUrl, setPreviewUrl]         = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   // Navegação mobile — 0=mapa, 1=lista, 2=análise
   const [mobileTab, setMobileTab] = useState(0);
 
@@ -498,17 +503,41 @@ export default function MapaCasos() {
     }catch(e){ addN('Erro CSV: '+e.message,'error'); }
   },[casosF,addN]);
 
-  const exportPDF = useCallback(async()=>{
-    setLoading(true);
+  // ── NOVO: pré-visualizar PDF antes de baixar ─────────────────────────────
+  const previewPDF = useCallback(async()=>{
+    setPreviewLoading(true);
     try{
-      const blob=await pdf(<RelatorioPDF casos={casosF} stats={stats} filtros={F} ia={ia}/>).toBlob();
-      const url=URL.createObjectURL(blob);
-      const a=Object.assign(document.createElement('a'),{href:url,download:`vigicolera_${format(new Date(),'yyyyMMdd_HHmm')}.pdf`});
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-      addN('PDF gerado!','success');
-    }catch(e){ addN('Erro PDF: '+e.message,'error'); }
-    finally{ setLoading(false); }
+      const blob = await pdf(
+        <RelatorioPDF casos={casosF} stats={stats} filtros={F} ia={ia}/>
+      ).toBlob();
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl(url);
+      setPreviewOpen(true);
+    }catch(e){
+      addN('Erro ao gerar pré-visualização: '+e.message,'error');
+    }finally{
+      setPreviewLoading(false);
+    }
   },[casosF,stats,F,ia,addN]);
+
+  const closePDFPreview = useCallback(()=>{
+    setPreviewOpen(false);
+    if(previewUrl){ URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
+  },[previewUrl]);
+
+  const downloadFromPreview = useCallback(()=>{
+    if(!previewUrl) return;
+    const a=Object.assign(document.createElement('a'),{
+      href:previewUrl,
+      download:`vigicolera_${format(new Date(),'yyyyMMdd_HHmm')}.pdf`,
+    });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    addN('PDF baixado!','success');
+  },[previewUrl,addN]);
+
+  const openPDFNewTab = useCallback(()=>{
+    if(previewUrl) window.open(previewUrl,'_blank');
+  },[previewUrl]);
 
   const share = useCallback(async()=>{
     const text=`VigiCólera Uige\n${stats.total} casos | ${stats.confirmados} confirmados | ${stats.bairros} bairros\n${new Date().toLocaleDateString('pt-AO')}`;
@@ -516,7 +545,7 @@ export default function MapaCasos() {
     else{ await navigator.clipboard.writeText(text).catch(()=>{}); addN('Resumo copiado!','info'); }
   },[stats,addN]);
 
-  // ─── Gaveta de Filtros (mobile bottom sheet + desktop inline) ─────────────
+  // ─── Gaveta de Filtros ────────────────────────────────────────────────────
   const FilterPanel = () => (
     <Box sx={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
       <Box sx={{px:2,py:1.5,display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid rgba(255,255,255,0.08)',flexShrink:0}}>
@@ -718,7 +747,13 @@ export default function MapaCasos() {
       </Card>
       <Box sx={{display:'flex',gap:1,flexWrap:'wrap'}}>
         <Button size="small" variant="outlined" color="primary" startIcon={<GetAppIcon/>} onClick={exportCSV} sx={{flex:1,borderRadius:2}}>CSV</Button>
-        <Button size="small" variant="outlined" color="primary" startIcon={<PrintIcon/>} onClick={exportPDF} disabled={loading} sx={{flex:1,borderRadius:2}}>PDF</Button>
+        {/* BOTÃO PDF → pré-visualização */}
+        <Button size="small" variant="outlined" color="primary"
+          startIcon={previewLoading?<CircularProgress size={13} color="inherit"/>:<PrintIcon/>}
+          onClick={previewPDF} disabled={previewLoading}
+          sx={{flex:1,borderRadius:2}}>
+          {previewLoading?'Gerando…':'PDF'}
+        </Button>
         <Button size="small" variant="outlined" color="secondary" startIcon={<ShareIcon/>} onClick={share} sx={{flex:1,borderRadius:2}}>Partilhar</Button>
       </Box>
     </Box>
@@ -883,8 +918,11 @@ export default function MapaCasos() {
       <MenuItem onClick={()=>{exportCSV();setMore(null);}}>
         <GetAppIcon sx={{mr:1.5,fontSize:18}}/><Typography variant="body2">Exportar CSV</Typography>
       </MenuItem>
-      <MenuItem onClick={()=>{exportPDF();setMore(null);}} disabled={loading}>
-        <PrintIcon sx={{mr:1.5,fontSize:18}}/><Typography variant="body2">Exportar PDF</Typography>
+      {/* ITEM PDF → abre pré-visualização */}
+      <MenuItem onClick={()=>{previewPDF();setMore(null);}} disabled={previewLoading}>
+        <PrintIcon sx={{mr:1.5,fontSize:18,color:previewLoading?'text.disabled':'inherit'}}/>
+        <Typography variant="body2">{previewLoading?'A gerar…':'Pré-visualizar / Exportar PDF'}</Typography>
+        {previewLoading&&<CircularProgress size={12} sx={{ml:'auto'}}/>}
       </MenuItem>
       <MenuItem onClick={()=>{share();setMore(null);}}>
         <ShareIcon sx={{mr:1.5,fontSize:18}}/><Typography variant="body2">Partilhar</Typography>
@@ -910,7 +948,6 @@ export default function MapaCasos() {
                 </Box>
               </Box>
 
-              {/* Chips de resumo */}
               {isDesk&&(
                 <Box sx={{display:'flex',gap:.8}}>
                   <Chip icon={<WarningIcon sx={{fontSize:'13px !important'}}/>} label={`${stats.confirmados} Conf.`} color="error" variant="outlined" size="small" sx={{fontSize:'0.68rem',height:24}}/>
@@ -971,7 +1008,12 @@ export default function MapaCasos() {
                       </Select>
                     </FormControl>
                     <Tooltip title="Exportar CSV"><IconButton size="small" color="inherit" onClick={exportCSV}><GetAppIcon sx={{fontSize:18}}/></IconButton></Tooltip>
-                    <Tooltip title="Exportar PDF"><span><IconButton size="small" color="inherit" onClick={exportPDF} disabled={loading}><PrintIcon sx={{fontSize:18}}/></IconButton></span></Tooltip>
+                    {/* Botão PDF desktop → pré-visualização */}
+                    <Tooltip title="Pré-visualizar / Exportar PDF"><span>
+                      <IconButton size="small" color="inherit" onClick={previewPDF} disabled={previewLoading}>
+                        {previewLoading?<CircularProgress size={15} color="inherit"/>:<PrintIcon sx={{fontSize:18}}/>}
+                      </IconButton>
+                    </span></Tooltip>
                     <Tooltip title="Partilhar"><IconButton size="small" color="inherit" onClick={share}><ShareIcon sx={{fontSize:18}}/></IconButton></Tooltip>
                   </>
                 )}
@@ -985,7 +1027,7 @@ export default function MapaCasos() {
           </AppBar>
           <Box sx={{height:appH}}/>
 
-          {/* ── Stats collapse (desktop/tablet apenas) ───────────────────── */}
+          {/* ── Stats collapse ───────────────────────────────────────────── */}
           {!isMobile&&(
             <Collapse in={showStats}>
               <Paper elevation={0} sx={{px:{xs:2,sm:3},py:2,bgcolor:'rgba(12,12,18,0.98)',borderBottom:'1px solid rgba(255,255,255,0.07)'}}>
@@ -1010,14 +1052,12 @@ export default function MapaCasos() {
           {/* ── Corpo principal ──────────────────────────────────────────────── */}
           <Box sx={{display:'flex',flex:1,overflow:'hidden',position:'relative'}}>
 
-            {/* Sidebar desktop */}
             {isDesk&&sidebar&&(
               <Paper elevation={0} sx={{width:{lg:340,xl:380},flexShrink:0,borderRight:'1px solid rgba(255,255,255,0.07)',bgcolor:'background.paper',display:'flex',flexDirection:'column'}}>
                 <SidePanel/>
               </Paper>
             )}
 
-            {/* Drawer tablet */}
             {isTablet&&(
               <SwipeableDrawer anchor="left" open={sidebar} onOpen={()=>setSidebar(true)} onClose={()=>setSidebar(false)}
                 PaperProps={{sx:{width:340,bgcolor:'#111'}}}>
@@ -1025,11 +1065,8 @@ export default function MapaCasos() {
               </SwipeableDrawer>
             )}
 
-            {/* ── MOBILE: tabs ──────────────────────────────────────────────── */}
             {isMobile ? (
               <Box sx={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-
-                {/* Tab 0 — Mapa */}
                 <Box sx={{flex:1,display:mobileTab===0?'block':'none',position:'relative',overflow:'hidden'}}>
                   {loading&&<LinearProgress sx={{position:'absolute',top:0,left:0,right:0,zIndex:20}}/>}
                   <LoadScript googleMapsApiKey={MAPS_KEY} libraries={MAPS_LIBS}
@@ -1038,16 +1075,12 @@ export default function MapaCasos() {
                       showHeatmap={heatmap} grupos={gruposF} casos={casosF} infoId={infoId}
                       onCase={goToCase} onGroup={goToGroup} onClose={()=>setInfoId(null)}/>
                   </LoadScript>
-
-                  {/* Pill contagem */}
                   <Box sx={{position:'absolute',top:10,left:10,bgcolor:'rgba(255,255,255,0.96)',borderRadius:20,px:1.5,py:.5,zIndex:10,boxShadow:'0 1px 6px rgba(0,0,0,0.2)',display:'flex',alignItems:'center',gap:.7}}>
                     <PeopleIcon sx={{fontSize:13,color:'#1a73e8'}}/>
                     <Typography sx={{fontSize:'0.7rem',fontWeight:700,color:'#3c4043'}}>
                       {casosF.length} casos{nActiveF>0&&` · ${nActiveF} filtro${nActiveF>1?'s':''}`}
                     </Typography>
                   </Box>
-
-                  {/* Botões sobre mapa */}
                   <Box sx={{position:'absolute',top:8,right:10,zIndex:10,display:'flex',flexDirection:'column',gap:.8}}>
                     <IconButton onClick={()=>setFilterOpen(true)} size="small"
                       sx={{bgcolor:'white',color:'#5f6368',width:40,height:40,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:2,'&:hover':{bgcolor:'#f5f5f5'}}}>
@@ -1058,20 +1091,14 @@ export default function MapaCasos() {
                       <LayersIcon sx={{fontSize:18}}/>
                     </IconButton>
                   </Box>
-
-                  {/* Zoom */}
                   <Box sx={{position:'absolute',bottom:16,right:10,display:'flex',flexDirection:'column',zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,overflow:'hidden'}}>
                     <IconButton onClick={()=>setZoom(p=>Math.min(p+1,21))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:42,height:42,borderBottom:'1px solid #e0e0e0','&:hover':{bgcolor:'#f5f5f5'}}}><ZoomInIcon sx={{fontSize:21}}/></IconButton>
                     <IconButton onClick={()=>setZoom(p=>Math.max(p-1,1))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:42,height:42,'&:hover':{bgcolor:'#f5f5f5'}}}><ZoomOutIcon sx={{fontSize:21}}/></IconButton>
                   </Box>
-
-                  {/* Centrar */}
-                  <IconButton onClick={()=>{setCenter({lat:-8.8368,lng:13.2343});setZoom(12);}}
-                    sx={{position:'absolute',bottom:76,right:10,zIndex:10,bgcolor:'white',color:'#5f6368',width:42,height:42,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
-                    <MyLocationIcon sx={{fontSize:20}}/>
-                  </IconButton>
-
-                  {/* Legenda compacta */}
+                 <IconButton onClick={()=>{ const {center:nc,zoom:nz}=calculateBounds(casosF.length>0?casosF:casos); setCenter(nc); setZoom(nz); }}
+  sx={{position:'absolute',bottom:76,right:10,zIndex:10,bgcolor:'white',color:'#5f6368',width:42,height:42,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
+  <MyLocationIcon sx={{fontSize:20}}/>
+</IconButton>
                   {legend&&(
                     <Card elevation={2} sx={{position:'absolute',bottom:16,left:10,bgcolor:'rgba(255,255,255,0.96)',borderRadius:2,p:1,minWidth:105,zIndex:10}}>
                       <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:.4}}>
@@ -1087,19 +1114,14 @@ export default function MapaCasos() {
                     </Card>
                   )}
                 </Box>
-
-                {/* Tab 1 — Lista */}
                 <Box sx={{flex:1,display:mobileTab===1?'flex':'none',flexDirection:'column',overflow:'hidden',bgcolor:'background.paper'}}>
                   <CaseList/>
                 </Box>
-
-                {/* Tab 2 — Análise */}
                 <Box sx={{flex:1,display:mobileTab===2?'block':'none',overflow:'hidden',bgcolor:'background.paper'}}>
                   <AnalysePanel/>
                 </Box>
               </Box>
             ) : (
-              /* ── DESKTOP/TABLET: mapa ─────────────────────────────────── */
               <Box sx={{flex:1,position:'relative',overflow:'hidden'}}>
                 {loading&&<LinearProgress sx={{position:'absolute',top:0,left:0,right:0,zIndex:20}}/>}
                 <LoadScript googleMapsApiKey={MAPS_KEY} libraries={MAPS_LIBS}
@@ -1108,7 +1130,6 @@ export default function MapaCasos() {
                     showHeatmap={heatmap} grupos={gruposF} casos={casosF} infoId={infoId}
                     onCase={goToCase} onGroup={goToGroup} onClose={()=>setInfoId(null)}/>
                 </LoadScript>
-
                 <Box sx={{position:'absolute',top:10,left:isDesk&&sidebar?{lg:348,xl:388}:10,transition:'left .25s',bgcolor:'rgba(255,255,255,0.96)',borderRadius:20,px:1.5,py:.5,zIndex:10,boxShadow:'0 1px 6px rgba(0,0,0,0.2)',display:'flex',alignItems:'center',gap:.7}}>
                   {viewMode==='agrupado'?<LocationCityIcon sx={{fontSize:13,color:'#1a73e8'}}/>:<PeopleIcon sx={{fontSize:13,color:'#1a73e8'}}/>}
                   <Typography sx={{fontSize:'0.7rem',fontWeight:700,color:'#3c4043'}}>
@@ -1116,7 +1137,6 @@ export default function MapaCasos() {
                     {nActiveF>0&&` · ${nActiveF} filtro${nActiveF>1?'s':''}`}
                   </Typography>
                 </Box>
-
                 {legend&&(
                   <Card elevation={3} sx={{position:'absolute',bottom:24,right:14,bgcolor:'rgba(255,255,255,0.97)',borderRadius:2,p:1.5,minWidth:140,zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.18)',border:'1px solid rgba(0,0,0,0.07)'}}>
                     <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:.7}}>
@@ -1131,18 +1151,16 @@ export default function MapaCasos() {
                     ))}
                   </Card>
                 )}
-
                 <Box sx={{position:'absolute',bottom:24,right:legend?170:14,transition:'right .25s',display:'flex',flexDirection:'column',zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,overflow:'hidden'}}>
                   <IconButton onClick={()=>setZoom(p=>Math.min(p+1,21))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:36,height:36,borderBottom:'1px solid #e0e0e0','&:hover':{bgcolor:'#f5f5f5'}}}><ZoomInIcon sx={{fontSize:19}}/></IconButton>
                   <IconButton onClick={()=>setZoom(p=>Math.max(p-1,1))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:36,height:36,'&:hover':{bgcolor:'#f5f5f5'}}}><ZoomOutIcon sx={{fontSize:19}}/></IconButton>
                 </Box>
-
-                <Tooltip title="Centrar">
-                  <IconButton onClick={()=>{setCenter({lat:-8.8368,lng:13.2343});setZoom(12);}}
-                    sx={{position:'absolute',bottom:68,right:legend?170:14,transition:'right .25s',zIndex:10,bgcolor:'white',color:'#5f6368',width:36,height:36,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
-                    <MyLocationIcon sx={{fontSize:18}}/>
-                  </IconButton>
-                </Tooltip>
+              <Tooltip title="Centrar em todos os casos">
+  <IconButton onClick={()=>{ const {center:nc,zoom:nz}=calculateBounds(casosF.length>0?casosF:casos); setCenter(nc); setZoom(nz); }}
+    sx={{position:'absolute',bottom:68,right:legend?170:14,transition:'right .25s',zIndex:10,bgcolor:'white',color:'#5f6368',width:36,height:36,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
+    <MyLocationIcon sx={{fontSize:18}}/>
+  </IconButton>
+</Tooltip>
               </Box>
             )}
           </Box>
@@ -1171,7 +1189,7 @@ export default function MapaCasos() {
             </Box>
           </SwipeableDrawer>
 
-          {/* ── Drawer Detalhes (bottom no mobile, lateral no desktop) ──────── */}
+          {/* ── Drawer Detalhes ──────────────────────────────────────────────── */}
           <Drawer anchor={isMobile?'bottom':'right'} open={detailOpen} onClose={()=>setDetail(false)}
             PaperProps={{sx:{
               width:isMobile?'100%':{xs:'100vw',sm:380,md:420},
@@ -1183,7 +1201,6 @@ export default function MapaCasos() {
             {isMobile&&<Box sx={{display:'flex',justifyContent:'center',pt:1.2,pb:.5}}><Box sx={{width:40,height:4,borderRadius:2,bgcolor:'rgba(255,255,255,0.2)'}}/></Box>}
             {sel&&(
               <Box sx={{display:'flex',flexDirection:'column',height:isMobile?'calc(100% - 24px)':'100%'}}>
-                {/* Header */}
                 <Box sx={{
                   px:2.5,py:2,flexShrink:0,
                   background:sel.status==='agrupado'
@@ -1206,8 +1223,6 @@ export default function MapaCasos() {
                     <IconButton size="small" onClick={()=>setDetail(false)}><CloseIcon sx={{fontSize:18}}/></IconButton>
                   </Box>
                 </Box>
-
-                {/* Corpo */}
                 <Box sx={{flex:1,overflow:'auto',px:2.5,py:2}}>
                   {sel.status==='agrupado'?(
                     <>
@@ -1270,8 +1285,6 @@ export default function MapaCasos() {
                     </Grid>
                   )}
                 </Box>
-
-                {/* Acções */}
                 <Box sx={{px:2.5,py:2,borderTop:'1px solid rgba(255,255,255,0.07)',display:'flex',gap:1,flexWrap:'wrap',flexShrink:0}}>
                   <Button variant="contained" color="primary" startIcon={<VisibilityIcon/>}
                     onClick={()=>{setCenter(sel.coordenadas);setZoom(17);setDetail(false);if(isMobile)setMobileTab(0);}}
@@ -1314,6 +1327,216 @@ export default function MapaCasos() {
               <Button onClick={()=>setDateDlg(null)} variant="contained">Aplicar</Button>
             </DialogActions>
           </Dialog>
+
+          {/* ══════════════════════════════════════════════════════════════════
+              MODAL PRÉ-VISUALIZAÇÃO PDF  ← NOVO
+          ══════════════════════════════════════════════════════════════════ */}
+          <Dialog
+            open={previewOpen}
+            onClose={closePDFPreview}
+            maxWidth={false}
+            fullScreen={isMobile}
+            PaperProps={{
+              sx:{
+                width:  isMobile ? '100%' : '92vw',
+                height: isMobile ? '100%' : '94vh',
+                maxWidth: 'none',
+                bgcolor: '#0d0d0d',
+                borderRadius: isMobile ? 0 : 3,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,0.08)',
+              },
+            }}
+          >
+            {/* Cabeçalho do modal */}
+            <Box sx={{
+              px: {xs:1.5, sm:2.5},
+              py: 1.5,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
+              background: 'linear-gradient(135deg,rgba(26,115,232,0.18) 0%,rgba(26,115,232,0.04) 100%)',
+            }}>
+              <Box sx={{display:'flex',alignItems:'center',gap:1.4}}>
+                <Avatar sx={{bgcolor:'rgba(26,115,232,0.2)',width:36,height:36,border:'1px solid rgba(26,115,232,0.3)'}}>
+                  <PrintIcon sx={{fontSize:18,color:'#1a73e8'}}/>
+                </Avatar>
+                <Box>
+                  <Typography fontWeight={800} sx={{fontSize:{xs:'0.85rem',sm:'0.95rem'},lineHeight:1.15}}>
+                    Pré-visualização do Relatório
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{fontSize:'0.67rem'}}>
+                    {casosF.length} casos · {format(new Date(),'dd/MM/yyyy HH:mm')}
+                    {nActiveF>0&&` · ${nActiveF} filtro${nActiveF>1?'s':''} activos`}
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* Acções do modal */}
+              <Box sx={{display:'flex',gap:{xs:.5,sm:1},alignItems:'center',flexShrink:0}}>
+                {/* Abrir em nova aba */}
+                <Tooltip title="Abrir em nova aba">
+                  <IconButton
+                    size="small"
+                    onClick={openPDFNewTab}
+                    sx={{
+                      bgcolor:'rgba(255,255,255,0.07)',
+                      color:'rgba(255,255,255,0.7)',
+                      borderRadius:1.5,
+                      width:{xs:34,sm:36},
+                      height:{xs:34,sm:36},
+                      '&:hover':{bgcolor:'rgba(255,255,255,0.12)'},
+                    }}
+                  >
+                    <OpenInNewIcon sx={{fontSize:{xs:16,sm:17}}}/>
+                  </IconButton>
+                </Tooltip>
+
+                {/* Botão Baixar */}
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size={isMobile?'small':'medium'}
+                  startIcon={<GetAppIcon sx={{fontSize:{xs:15,sm:17}}}/>}
+                  onClick={downloadFromPreview}
+                  sx={{
+                    borderRadius:2,
+                    fontSize:{xs:'0.72rem',sm:'0.78rem'},
+                    px:{xs:1.5,sm:2.2},
+                    py:{xs:.7,sm:.9},
+                    fontWeight:700,
+                    boxShadow:'0 2px 8px rgba(26,115,232,0.4)',
+                    '&:hover':{boxShadow:'0 4px 14px rgba(26,115,232,0.5)'},
+                  }}
+                >
+                  {isMobile?'Baixar':'Baixar PDF'}
+                </Button>
+
+                {/* Fechar */}
+                <IconButton
+                  size="small"
+                  onClick={closePDFPreview}
+                  sx={{
+                    bgcolor:'rgba(255,255,255,0.06)',
+                    color:'rgba(255,255,255,0.7)',
+                    borderRadius:1.5,
+                    width:{xs:34,sm:36},
+                    height:{xs:34,sm:36},
+                    '&:hover':{bgcolor:'rgba(234,67,53,0.18)',color:'#ea4335'},
+                    transition:'all .2s',
+                  }}
+                >
+                  <CloseIcon sx={{fontSize:{xs:16,sm:17}}}/>
+                </IconButton>
+              </Box>
+            </Box>
+
+            {/* Barra de informações rápidas */}
+            <Box sx={{
+              px:2.5, py:.9,
+              bgcolor:'rgba(255,255,255,0.025)',
+              borderBottom:'1px solid rgba(255,255,255,0.05)',
+              display:'flex', gap:1, flexWrap:'wrap', flexShrink:0,
+            }}>
+              {[
+                {l:'Confirmados', v:stats.confirmados, c:'#ea4335'},
+                {l:'Suspeitos',   v:stats.suspeitos,   c:'#fbbc05'},
+                {l:'Pendentes',  v:stats.pendentes,   c:'#4285f4'},
+                {l:'Descartados',v:stats.descartados, c:'#34a853'},
+                {l:'Bairros',    v:stats.bairros,     c:'#1a73e8'},
+              ].map(({l,v,c})=>(
+                <Chip
+                  key={l}
+                  label={`${v} ${l}`}
+                  size="small"
+                  sx={{
+                    bgcolor:`${c}18`,
+                    color:c,
+                    border:`1px solid ${c}30`,
+                    fontSize:'0.62rem',
+                    height:20,
+                    fontWeight:600,
+                  }}
+                />
+              ))}
+              {nActiveF>0&&(
+                <Chip
+                  label={`${nActiveF} filtro${nActiveF>1?'s':''} aplicado${nActiveF>1?'s':''}`}
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                  sx={{fontSize:'0.62rem',height:20}}
+                />
+              )}
+            </Box>
+
+            {/* Área do iframe / loading */}
+            <Box sx={{flex:1,overflow:'hidden',position:'relative',bgcolor:'#1a1a1a'}}>
+              {previewLoading||!previewUrl ? (
+                <Box sx={{
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  height:'100%',flexDirection:'column',gap:2.5,
+                }}>
+                  <Box sx={{position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <CircularProgress color="primary" size={52} thickness={3}/>
+                    <PrintIcon sx={{position:'absolute',fontSize:22,color:'primary.main',opacity:.7}}/>
+                  </Box>
+                  <Box sx={{textAlign:'center'}}>
+                    <Typography sx={{fontSize:'0.88rem',fontWeight:600,mb:.4}}>A gerar relatório…</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{fontSize:'0.72rem'}}>
+                      Processando {casosF.length} casos
+                    </Typography>
+                  </Box>
+                </Box>
+              ) : (
+                <iframe
+                  src={previewUrl}
+                  style={{width:'100%',height:'100%',border:'none',display:'block'}}
+                  title="Pré-visualização do Relatório PDF"
+                />
+              )}
+            </Box>
+
+            {/* Rodapé do modal */}
+            <Box sx={{
+              px:2.5, py:1.2,
+              borderTop:'1px solid rgba(255,255,255,0.06)',
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              bgcolor:'rgba(0,0,0,0.3)', flexShrink:0,
+              flexWrap:'wrap', gap:1,
+            }}>
+              <Typography variant="caption" color="text.disabled" sx={{fontSize:'0.62rem'}}>
+                📄 Formato A4 · Paisagem · Máx. 200 linhas por relatório
+              </Typography>
+              <Box sx={{display:'flex',gap:.8}}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<CloseIcon sx={{fontSize:14}}/>}
+                  onClick={closePDFPreview}
+                  sx={{borderRadius:2,fontSize:'0.7rem',opacity:.6,'&:hover':{opacity:1},borderColor:'rgba(255,255,255,0.2)'}}
+                >
+                  Fechar
+                </Button>
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="primary"
+                  startIcon={<GetAppIcon sx={{fontSize:14}}/>}
+                  onClick={downloadFromPreview}
+                  sx={{borderRadius:2,fontSize:'0.7rem',fontWeight:700}}
+                >
+                  Baixar PDF
+                </Button>
+              </Box>
+            </Box>
+          </Dialog>
+          {/* ══════════════════════════════════════════════════════════════════ */}
 
           {/* ── Snackbar ─────────────────────────────────────────────────────── */}
           <Snackbar open={showNotif} autoHideDuration={4000} onClose={()=>setShowN(false)}
