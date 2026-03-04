@@ -46,8 +46,8 @@
   --radius-md:   12px;
   --radius-lg:   20px;
   --radius-full: 9999px;
-
   
+  /* Safe area - removido do body */
   --safe-top:    env(safe-area-inset-top,    0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left:   env(safe-area-inset-left,   0px);
@@ -84,8 +84,12 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   
-  padding-left:  var(--safe-left);
-  padding-right: var(--safe-right);
+  /* Removido padding do body */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
 #__next,
@@ -98,17 +102,123 @@ body {
   flex-direction: column;
   
   isolation: isolate;
+  position: relative;
 }
 
-::-webkit-scrollbar       { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
+/* Safe area aplicada apenas em elementos específicos */
+.safe-area-top {
+  padding-top: var(--safe-top);
+}
+
+.safe-area-bottom {
+  padding-bottom: var(--safe-bottom);
+}
+
+.safe-area-left {
+  padding-left: var(--safe-left);
+}
+
+.safe-area-right {
+  padding-right: var(--safe-right);
+}
+
+/* Scroll content - área que deve rolar */
+.scroll-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  
+  /* Garantir que o conteúdo não fique atrás da navegação */
+  padding-bottom: calc(var(--bottomnav-height) + var(--safe-bottom));
+  scroll-padding-bottom: calc(var(--bottomnav-height) + var(--safe-bottom));
+}
+
+/* Quando não tem bottom navigation */
+.scroll-content.no-bottom-nav {
+  padding-bottom: var(--safe-bottom);
+  scroll-padding-bottom: var(--safe-bottom);
+}
+
+/* Bottom navigation com safe area */
+.bottom-navigation {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background-color: var(--bg-paper);
+  border-top: 1px solid var(--border);
+  
+  /* Safe area aplicada corretamente */
+  padding-bottom: var(--safe-bottom);
+  height: calc(var(--bottomnav-height) + var(--safe-bottom));
+  min-height: calc(var(--bottomnav-height) + var(--safe-bottom));
+  display: flex;
+  align-items: center;
+  box-sizing: content-box;
+}
+
+/* App bar com safe area */
+.app-bar {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1100;
+  background-color: var(--bg-paper);
+  border-bottom: 1px solid var(--border);
+  
+  padding-top: var(--safe-top);
+  min-height: calc(var(--appbar-height-mobile) + var(--safe-top));
+  display: flex;
+  align-items: center;
+}
+
+/* Overlay para dialogs */
+.MuiBackdrop-root {
+  background-color: rgba(0, 0, 0, 0.72) !important;
+  backdrop-filter: blur(4px);
+}
+
+/* Bottom navigation do MUI */
+.MuiBottomNavigation-root {
+  padding-bottom: var(--safe-bottom) !important;
+  height: calc(56px + var(--safe-bottom)) !important;
+  min-height: calc(56px + var(--safe-bottom)) !important;
+  box-sizing: content-box !important;
+}
+
+/* Drawer do MUI */
+.MuiDrawer-paper {
+  padding-top: var(--safe-top) !important;
+  padding-bottom: var(--safe-bottom) !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
   border-radius: var(--radius-full);
   transition: var(--transition-fast);
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); }
-::-webkit-scrollbar-corner      { background: transparent; }
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
 
 * {
   scrollbar-width: thin;
@@ -125,21 +235,29 @@ a {
   text-decoration: none;
   transition: var(--transition-fast);
 }
+
 a:hover {
   color: var(--secondary);
   text-decoration: underline;
 }
 
-img, svg {
+img,
+svg {
   display: block;
   max-width: 100%;
 }
 
-input, textarea, select, button {
+input,
+textarea,
+select,
+button {
   font-family: inherit;
   font-size: inherit;
 }
-button { cursor: pointer; }
+
+button {
+  cursor: pointer;
+}
 
 :focus-visible {
   outline: 2px solid var(--primary);
@@ -161,11 +279,23 @@ button { cursor: pointer; }
   box-shadow: var(--shadow-md) !important;
   background-color: #ffffff !important;
 }
-.gm-style .gm-style-iw-d   { overflow: hidden !important; padding: 0 !important; }
-.gm-style .gm-style-iw-t::after { display: none !important; }
-.gm-style-iw-chr            { display: none !important; }
 
-.MuiOutlinedInput-root:focus-within { outline: none; }
+.gm-style .gm-style-iw-d {
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.gm-style .gm-style-iw-t::after {
+  display: none !important;
+}
+
+.gm-style-iw-chr {
+  display: none !important;
+}
+
+.MuiOutlinedInput-root:focus-within {
+  outline: none;
+}
 
 .MuiList-root,
 .MuiDrawer-paper,
@@ -174,52 +304,123 @@ button { cursor: pointer; }
   scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 
-.MuiBackdrop-root {
-  background-color: rgba(0, 0, 0, 0.72) !important;
-  backdrop-filter: blur(4px);
-}
-
-.MuiBottomNavigation-root {
-  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
-  box-sizing: content-box !important;
-}
-
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
+
 @keyframes fadeInScale {
-  from { opacity: 0; transform: scale(0.96); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
+
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
+
 @keyframes slideUp {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
+
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.fade-in       { animation: fadeIn      0.25s ease forwards; }
-.fade-in-scale { animation: fadeInScale 0.2s  ease forwards; }
-.slide-up      { animation: slideUp     0.3s  ease forwards; }
-.pulse         { animation: pulse       1.8s  ease-in-out infinite; }
+.fade-in {
+  animation: fadeIn 0.25s ease forwards;
+}
 
-.fill-height     { height: 100%; min-height: 0; }
-.flex-col        { display: flex; flex-direction: column; }
-.flex-center     { display: flex; align-items: center; justify-content: center; }
-.overflow-hidden { overflow: hidden; }
-.overflow-auto   { overflow: auto; }
-.text-truncate   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.font-mono       { font-family: 'Courier New', Courier, monospace; }
+.fade-in-scale {
+  animation: fadeInScale 0.2s ease forwards;
+}
+
+.slide-up {
+  animation: slideUp 0.3s ease forwards;
+}
+
+.pulse {
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+.fill-height {
+  height: 100%;
+  min-height: 0;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.overflow-hidden {
+  overflow: hidden;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-mono {
+  font-family: "Courier New", Courier, monospace;
+}
+
+/* Media query específica para iOS */
+@supports (-webkit-touch-callout: none) {
+  body {
+    /* Fix específico para iOS */
+    height: -webkit-fill-available;
+  }
+  
+  #__next,
+  #root {
+    height: -webkit-fill-available;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -227,12 +428,14 @@ button { cursor: pointer; }
 }
 
 @media print {
-  body, #__next {
+  body,
+  #__next {
     height: auto;
     max-height: none;
     overflow: visible;
     background: white;
     color: black;
     padding: 0;
+    position: static;
   }
 }
