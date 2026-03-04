@@ -1105,10 +1105,10 @@ export default function MapaCasos() {
                     <IconButton onClick={()=>setZoom(p=>Math.min(p+1,21))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:42,height:42,borderBottom:'1px solid #e0e0e0','&:hover':{bgcolor:'#f5f5f5'}}}><ZoomInIcon sx={{fontSize:21}}/></IconButton>
                     <IconButton onClick={()=>setZoom(p=>Math.max(p-1,1))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:42,height:42,'&:hover':{bgcolor:'#f5f5f5'}}}><ZoomOutIcon sx={{fontSize:21}}/></IconButton>
                   </Box>
-                  <IconButton onClick={()=>{setCenter({lat:-8.8368,lng:13.2343});setZoom(12);}}
-                    sx={{position:'absolute',bottom:76,right:10,zIndex:10,bgcolor:'white',color:'#5f6368',width:42,height:42,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
-                    <MyLocationIcon sx={{fontSize:20}}/>
-                  </IconButton>
+                <IconButton onClick={()=>{ const {center:nc,zoom:nz}=calculateBounds(casosF.length>0?casosF:casos); setCenter(nc); setZoom(nz); }}
+  sx={{position:'absolute',bottom:76,right:10,zIndex:10,bgcolor:'white',color:'#5f6368',width:42,height:42,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
+  <MyLocationIcon sx={{fontSize:20}}/>
+</IconButton>
                   {legend&&(
                     <Card elevation={2} sx={{position:'absolute',bottom:16,left:10,bgcolor:'rgba(255,255,255,0.96)',borderRadius:2,p:1,minWidth:105,zIndex:10}}>
                       <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:.4}}>
