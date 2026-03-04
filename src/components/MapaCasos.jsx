@@ -1,4 +1,8 @@
-
+/**
+ * VigiCólera Uige — MapaCasos
+ * Layout 100% responsivo — Mobile + Tablet + Desktop
+ * Com pré-visualização de PDF antes de baixar
+ */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box, Card, Chip, Avatar, List, ListItem, ListItemButton,
@@ -111,6 +115,10 @@ const darkTheme = createTheme({
           backgroundColor: 'rgba(10,10,10,0.97)',
           borderTop: '1px solid rgba(255,255,255,0.08)',
           backdropFilter: 'blur(20px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          height: 'calc(60px + env(safe-area-inset-bottom, 0px))',
+          minHeight: 'calc(60px + env(safe-area-inset-bottom, 0px))',
+          boxSizing: 'content-box',
         },
       },
     },
@@ -1002,7 +1010,6 @@ export default function MapaCasos() {
 
   const APP_H      = isMobile ? 56 : 64;   // altura AppBar
   const BOTTOM_H   = isMobile ? 60 : 0;    // altura BottomNav
-  const bottomNavH = BOTTOM_H;             // mantido para compatibilidade
 
   return (
     <ThemeProvider theme={darkTheme}>
@@ -1227,19 +1234,19 @@ export default function MapaCasos() {
                     </IconButton>
                   </Box>
                   {/* Zoom */}
-                  <Box sx={{position:'absolute',bottom:'calc(16px + env(safe-area-inset-bottom, 0px))',right:10,display:'flex',flexDirection:'column',zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,overflow:'hidden'}}>
+                  <Box sx={{position:'absolute',bottom:16,right:10,display:'flex',flexDirection:'column',zIndex:10,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,overflow:'hidden'}}>
                     <IconButton onClick={()=>setZoom(p=>Math.min(p+1,21))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:42,height:42,borderBottom:'1px solid #e0e0e0','&:hover':{bgcolor:'#f5f5f5'}}}><ZoomInIcon sx={{fontSize:21}}/></IconButton>
                     <IconButton onClick={()=>setZoom(p=>Math.max(p-1,1))} size="small" sx={{bgcolor:'white',color:'#5f6368',borderRadius:0,width:42,height:42,'&:hover':{bgcolor:'#f5f5f5'}}}><ZoomOutIcon sx={{fontSize:21}}/></IconButton>
                   </Box>
                   {/* Centrar */}
                   <IconButton
                     onClick={()=>{ const {center:nc,zoom:nz}=calculateBounds(casosF.length>0?casosF:casos); setCenter(nc); setZoom(nz); }}
-                    sx={{position:'absolute',bottom:'calc(106px + env(safe-area-inset-bottom, 0px))',right:10,zIndex:10,bgcolor:'white',color:'#5f6368',width:42,height:42,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
+                    sx={{position:'absolute',bottom:106,right:10,zIndex:10,bgcolor:'white',color:'#5f6368',width:42,height:42,boxShadow:'0 2px 8px rgba(0,0,0,0.22)',borderRadius:1.5,'&:hover':{bgcolor:'#f5f5f5'}}}>
                     <MyLocationIcon sx={{fontSize:20}}/>
                   </IconButton>
                   {/* Legenda */}
                   {legend&&(
-                    <Card elevation={2} sx={{position:'absolute',bottom:'calc(16px + env(safe-area-inset-bottom, 0px))',left:10,bgcolor:'rgba(255,255,255,0.96)',borderRadius:2,p:1,minWidth:105,zIndex:10}}>
+                    <Card elevation={2} sx={{position:'absolute',bottom:16,left:10,bgcolor:'rgba(255,255,255,0.96)',borderRadius:2,p:1,minWidth:105,zIndex:10}}>
                       <Box sx={{display:'flex',justifyContent:'space-between',alignItems:'center',mb:.4}}>
                         <Typography sx={{fontWeight:700,color:'#3c4043',fontSize:'0.58rem',textTransform:'uppercase',letterSpacing:.3}}>Legenda</Typography>
                         <IconButton size="small" onClick={()=>setLegend(false)} sx={{p:.1,color:'#5f6368'}}><CloseIcon sx={{fontSize:10}}/></IconButton>
@@ -1277,18 +1284,21 @@ export default function MapaCasos() {
                   </Box>
                 </Box>
 
-                {/* ── Bottom Navigation — sempre visível, nunca encolhe ── */}
-                <BottomNavigation value={mobileTab} onChange={(_,v)=>setMobileTab(v)} showLabels
+                {/* ── Bottom Navigation — com safe area ── */}
+                <BottomNavigation 
+                  value={mobileTab} 
+                  onChange={(_,v)=>setMobileTab(v)} 
+                  showLabels
                   sx={{
-                    height:`${BOTTOM_H}px`,
-                    minHeight:`${BOTTOM_H}px`,
-                    flexShrink:0,
-                    flexGrow:0,
-                    width:'100%',
-                    zIndex:1200,
-                    boxShadow:'0 -2px 16px rgba(0,0,0,0.45)',
-                    paddingBottom:'env(safe-area-inset-bottom, 0px)',
-                    boxSizing:'content-box',
+                    height: `calc(${BOTTOM_H}px + env(safe-area-inset-bottom, 0px))`,
+                    minHeight: `calc(${BOTTOM_H}px + env(safe-area-inset-bottom, 0px))`,
+                    flexShrink: 0,
+                    flexGrow: 0,
+                    width: '100%',
+                    zIndex: 1200,
+                    boxShadow: '0 -2px 16px rgba(0,0,0,0.45)',
+                    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                    boxSizing: 'content-box',
                   }}>
                   <BottomNavigationAction label="Mapa"
                     icon={<Badge badgeContent={nActiveF||undefined} color="warning" variant="dot"><MapIcon/></Badge>}/>
